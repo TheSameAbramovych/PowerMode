@@ -1,0 +1,68 @@
+using PowerMode.Core.Config;
+
+namespace PowerMode.Core.Model;
+
+/// <summary>Activate <see cref="Scheme"/>; when <see cref="Configure"/> is set, (re)create and configure it first.</summary>
+public sealed record SchemeTarget(Guid Scheme, SchemeConfig? Configure);
+
+/// <summary>Either one brightness for every monitor, or restore each monitor from the snapshot.</summary>
+public sealed record MonitorTarget(int? BrightnessPercent, IReadOnlyList<MonitorLevel> Restore);
+
+/// <summary>Either one refresh rate for every display that offers it, or restore each display mode.</summary>
+public sealed record RefreshTarget(int? RefreshHz, IReadOnlyList<DisplayModeInfo> Restore);
+
+/// <summary>Either a limit in watts (clamped by the lever) or an exact milliwatt value to restore.</summary>
+public sealed record GpuTarget(int? LimitWatts, uint? RestoreMilliwatts);
+
+public enum WallpaperAction
+{
+    Leave,
+    Pause,
+    Play,
+}
+
+/// <summary>Engine stopped, or engine running with the listed containers started.</summary>
+public sealed record DockerTarget(bool Running, IReadOnlyList<string> ContainersToStart, int SnapshotContainerCount);
+
+public sealed record AppsTarget(IReadOnlyList<string> Close, IReadOnlyList<CapturedProcess> Relaunch)
+{
+    public static AppsTarget Empty { get; } = new([], []);
+}
+
+/// <summary>Efficiency mode on exactly these process names; cleared everywhere else it was set.</summary>
+public sealed record EfficiencyTarget(IReadOnlyList<string> ProcessNames)
+{
+    public static EfficiencyTarget ClearAll { get; } = new([]);
+}
+
+public sealed record ServicesTarget(IReadOnlyList<string> Stop, IReadOnlyList<string> Start)
+{
+    public static ServicesTarget Empty { get; } = new([], []);
+}
+
+/// <summary>
+/// The desired state of every lever for one mode. A <c>null</c> lever target means "leave it alone".
+/// Produced by <see cref="Planning.TargetPlanner"/>, consumed by the levers.
+/// </summary>
+public sealed record TargetState
+{
+    public required PowerModeKind Mode { get; init; }
+
+    public SchemeTarget? Scheme { get; init; }
+
+    public MonitorTarget? Monitor { get; init; }
+
+    public RefreshTarget? Refresh { get; init; }
+
+    public GpuTarget? Gpu { get; init; }
+
+    public WallpaperAction Wallpaper { get; init; }
+
+    public DockerTarget? Docker { get; init; }
+
+    public AppsTarget Apps { get; init; } = AppsTarget.Empty;
+
+    public EfficiencyTarget Efficiency { get; init; } = EfficiencyTarget.ClearAll;
+
+    public ServicesTarget Services { get; init; } = ServicesTarget.Empty;
+}

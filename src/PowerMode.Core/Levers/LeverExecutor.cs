@@ -1,0 +1,158 @@
+using System.Diagnostics;
+using System.Globalization;
+using PowerMode.Core.Config;
+using PowerMode.Core.Logging;
+using PowerMode.Core.Model;
+
+namespace PowerMode.Core.Levers;
+
+/// <summary>
+/// Runs a lever: plan, elevation gating, actions with a timeout, logging of start/result/duration.
+/// This is the single place that turns every exception into a <see cref="LeverResult"/>.
+/// </summary>
+public sealed class LeverExecutor
+{
+    public const string Category = "lever";
+    public static readonly TimeSpan DefaultActionTimeout = TimeSpan.FromSeconds(300);
+    private const string TimedOut = "Timed out";
+    private const string Cancelled = "Cancelled";
+    private const string Separator = "; ";
+
+    private readonly ILog _log;
+    private readonly TimeSpan _actionTimeout;
+
+    public LeverExecutor(ILog log, TimeSpan? actionTimeout = null)
+    {
+        _log = log;
+        _actionTimeout = actionTimeout ?? DefaultActionTimeout;
+    }
+
+    public async Task CaptureAsync(ILever lever, Snapshot snapshot, AppConfig config, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(lever);
+        var watch = Stopwatch.StartNew();
+        try
+        {
+            await lever.CaptureAsync(snapshot, config, cancellationToken).ConfigureAwait(false);
+            _log.Write(Category, $"{lever.Kind}: captured baseline ({Ms(watch)})");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            _log.Error(Category, $"{lever.Kind}: capture failed ({Ms(watch)})", ex);
+        }
+    }
+
+    public async Task<LeverPlan> PlanAsync(ILever lever, ApplyContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(lever);
+        try
+        {
+            return await lever.PlanAsync(context, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            _log.Error(Category, $"{lever.Kind}: cannot read current state", ex);
+            return LeverPlan.Fail(ex is LeverException ? ex.Message : $"Cannot read current state: {ex.Message}");
+        }
+    }
+
+    public async Task<LeverResult> ApplyAsync(ILever lever, ApplyContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(lever);
+        ArgumentNullException.ThrowIfNull(context);
+        var watch = Stopwatch.StartNew();
+        _log.Write(Category, $"{lever.Kind}: start ({ModeNames.Display(context.Target.Mode)})");
+        LeverResult result;
+        try
+        {
+            result = await RunAsync(lever, context, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            result = LeverResult.Failed(Cancelled);
+        }
+
+        result = result with { Duration = watch.Elapsed };
+        _log.Write(Category, $"{lever.Kind}: {result.Status} - {result.Detail} ({Ms(watch)})");
+        return result;
+    }
+
+    private async Task<LeverResult> RunAsync(ILever lever, ApplyContext context, CancellationToken cancellationToken)
+    {
+        var plan = await PlanAsync(lever, context, cancellationToken).ConfigureAwait(false);
+        if (plan.Unavailable is { } unavailable)
+        {
+            return LeverResult.Failed(unavailable);
+        }
+
+        if (plan.NotOwned)
+        {
+            return LeverResult.Skipped(LeverResult.NotOwned);
+        }
+
+        if (plan.Actions.Count == 0)
+        {
+            return LeverResult.Ok(LeverResult.AlreadySet);
+        }
+
+        var done = new List<string>();
+        var failures = new List<(string Reason, bool NeedsElevation)>();
+        foreach (var action in plan.Actions)
+        {
+            if (action.RequiresElevation && !context.IsElevated)
+            {
+                _log.Write(Category, $"{lever.Kind}: skipped \"{action.Description}\" - {LeverResult.NeedsAdministrator}");
+                failures.Add((LeverResult.NeedsAdministrator, true));
+                continue;
+            }
+
+            var failure = await ExecuteAsync(lever.Kind, action, cancellationToken).ConfigureAwait(false);
+            if (failure is { } f)
+            {
+                failures.Add(f);
+            }
+            else
+            {
+                done.Add(action.Description);
+            }
+        }
+
+        if (failures.Count == 0)
+        {
+            return LeverResult.Ok(string.Join(Separator, done));
+        }
+
+        var reason = string.Join(Separator, failures.Select(f => f.Reason).Distinct(StringComparer.Ordinal));
+        return LeverResult.Failed(reason, failures.All(f => f.NeedsElevation));
+    }
+
+    private async Task<(string Reason, bool NeedsElevation)?> ExecuteAsync(LeverKind kind, LeverAction action, CancellationToken cancellationToken)
+    {
+        var watch = Stopwatch.StartNew();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_actionTimeout);
+        try
+        {
+            await action.Execute(timeout.Token).ConfigureAwait(false);
+            _log.Write(Category, $"{kind}: {action.Description} - ok ({Ms(watch)})");
+            return null;
+        }
+        catch (LeverException ex)
+        {
+            _log.Write(Category, $"{kind}: {action.Description} - failed: {ex.Message} ({Ms(watch)})");
+            return (ex.Message, ex.NeedsElevation);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _log.Write(Category, $"{kind}: {action.Description} - timed out ({Ms(watch)})");
+            return (TimedOut, false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.Error(Category, $"{kind}: {action.Description} - failed ({Ms(watch)})", ex);
+            return (ex.Message, false);
+        }
+    }
+
+    private static string Ms(Stopwatch watch) => watch.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture) + " ms";
+}
