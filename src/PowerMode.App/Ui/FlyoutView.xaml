@@ -120,7 +120,7 @@
                                                 </TextBlock.RenderTransform>
                                             </TextBlock>
                                         </StackPanel>
-                                        <CheckBox Style="{StaticResource PmSwitch}" Content="Keep running" IsChecked="{Binding KeepDocker, Mode=OneWay}"
+                                        <CheckBox Style="{StaticResource PmSwitch}" Content="Keep running" IsChecked="{Binding KeepDocker, Mode=TwoWay}"
                                                   HorizontalAlignment="Right" Margin="0,8,0,0" Click="OnKeepDocker"
                                                   Visibility="{Binding ShowKeepDocker, Converter={StaticResource BoolToVisibility}}" />
                                     </StackPanel>
@@ -159,7 +159,7 @@
             <!-- 5. Footer -->
             <Grid Margin="0,10,4,0">
                 <TextBlock Text="{Binding Footer}" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" TextTrimming="None" />
-                <CheckBox Style="{StaticResource PmSwitch}" Content="Start with Windows" IsChecked="{Binding StartWithWindows, Mode=OneWay}"
+                <CheckBox Style="{StaticResource PmSwitch}" Content="Start with Windows" IsChecked="{Binding StartWithWindows, Mode=TwoWay}"
                           HorizontalAlignment="Right" Click="OnStartWithWindows" />
             </Grid>
         </StackPanel>

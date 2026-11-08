@@ -35,14 +35,9 @@ public sealed class PersistedState
 
     public Dictionary<LeverKind, LeverResult> LastResults { get; set; } = [];
 
-    public ModeOptions OptionsFor(PowerModeKind mode)
-    {
-        if (!Options.TryGetValue(mode, out var options))
-        {
-            options = new ModeOptions();
-            Options[mode] = options;
-        }
+    /// <summary>The options of a mode (defaults when never set). Read-only: change them with <see cref="WithOptions"/>.</summary>
+    public ModeOptions OptionsFor(PowerModeKind mode) => Options.TryGetValue(mode, out var options) ? options : new ModeOptions();
 
-        return options;
-    }
+    /// <summary>Replace the options of a mode copy-on-write, so readers on other threads never see a dictionary being changed.</summary>
+    public void WithOptions(PowerModeKind mode, ModeOptions options) => Options = new Dictionary<PowerModeKind, ModeOptions>(Options) { [mode] = options };
 }

@@ -20,7 +20,7 @@ public sealed class StateTests
             ClosedApps = ["steam"],
             LastResults = { [LeverKind.Gpu] = LeverResult.Failed(LeverResult.NeedsAdministrator, needsElevation: true) with { Duration = TimeSpan.FromMilliseconds(12) } },
         };
-        state.OptionsFor(PowerModeKind.Station).KeepDocker = true;
+        state.WithOptions(PowerModeKind.Station, new ModeOptions { KeepDocker = true });
 
         var json = StateStore.Serialize(state);
         var copy = StateStore.Deserialize(json)!;

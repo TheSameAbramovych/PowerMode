@@ -8,7 +8,7 @@ namespace PowerMode.App.Infrastructure;
 /// Live values for the right column. CPU watts are not measurable without a kernel driver, so CPU shows the
 /// effective clock (% Processor Performance × nominal MHz) and % Processor Utility from PDH.
 /// </summary>
-internal sealed class LiveProbe : ILiveProbe, IDisposable
+internal sealed class LiveProbe : IDisposable
 {
     private const string PerformanceCounter = @"\Processor Information(_Total)\% Processor Performance";
     private const string UtilityCounter = @"\Processor Information(_Total)\% Processor Utility";
@@ -39,11 +39,15 @@ internal sealed class LiveProbe : ILiveProbe, IDisposable
         }
     }
 
-    public async Task<LiveValues> ReadAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// CPU and GPU every call; monitor (DDC/CI) and Docker at most every 10 s and only when <paramref name="includeSlow"/>
+    /// (never during a switch: DDC reads would interleave with the brightness writes).
+    /// </summary>
+    public async Task<LiveValues> ReadAsync(bool includeSlow, CancellationToken cancellationToken)
     {
         var (ghz, utility) = ReadCpu();
         var gpu = _nvml.PowerWatts();
-        if (DateTime.UtcNow - _slowReadAt > SlowInterval)
+        if (includeSlow && DateTime.UtcNow - _slowReadAt > SlowInterval)
         {
             _slowReadAt = DateTime.UtcNow;
             _slow = await ReadSlowAsync(cancellationToken).ConfigureAwait(false);

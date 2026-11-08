@@ -15,11 +15,6 @@ public sealed record LiveValues(
     public static LiveValues Empty { get; } = new();
 }
 
-public interface ILiveProbe
-{
-    Task<LiveValues> ReadAsync(CancellationToken cancellationToken);
-}
-
 public enum RowGlyph
 {
     None,

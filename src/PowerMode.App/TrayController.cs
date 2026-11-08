@@ -44,6 +44,7 @@ internal sealed class TrayController : IDisposable
     private bool _switching;
     private bool _readingLive;
     private bool _disposed;
+    private bool _quitAfterSwitch;
     private bool _autostart;
     private int _spinnerFrame;
     private LiveValues _live = LiveValues.Empty;
@@ -144,8 +145,15 @@ internal sealed class TrayController : IDisposable
             _switching = false;
             _services.Live.Invalidate();
             Refresh();
-            await RefreshLiveAsync();
         }
+
+        if (_quitAfterSwitch)
+        {
+            Shutdown();
+            return;
+        }
+
+        await RefreshLiveAsync();
     }
 
     private void OnProgress(SwitchProgress progress)
@@ -198,7 +206,7 @@ internal sealed class TrayController : IDisposable
         try
         {
             _live = _flyout.IsVisible
-                ? await Task.Run(() => _services.Live.ReadAsync(CancellationToken.None))
+                ? await Task.Run(() => _services.Live.ReadAsync(includeSlow: !_switching, CancellationToken.None))
                 : _live with { GpuWatts = await Task.Run(_services.Live.GpuWatts) };
             Refresh();
         }
@@ -318,8 +326,16 @@ internal sealed class TrayController : IDisposable
         }
     }
 
+    /// <summary>Quit, optionally switching to Grid first. A running switch is finished first so state.json stays consistent.</summary>
     private async Task QuitAsync(bool toGrid)
     {
+        if (_switching)
+        {
+            _pending = toGrid ? PowerModeKind.Grid : null;
+            _quitAfterSwitch = true;
+            return;
+        }
+
         if (toGrid)
         {
             await SwitchAsync(PowerModeKind.Grid);

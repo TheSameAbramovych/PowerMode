@@ -164,7 +164,7 @@ public sealed class ModeSwitcher : IDisposable
 
     public void SetKeepDocker(PowerModeKind mode, bool keep)
     {
-        State.OptionsFor(mode).KeepDocker = keep;
+        State.WithOptions(mode, new ModeOptions { KeepDocker = keep });
         _store.Save(State);
     }
 
@@ -204,10 +204,15 @@ public sealed class ModeSwitcher : IDisposable
 
         await Task.WhenAll(tasks.Values).ConfigureAwait(false);
         var results = tasks.ToDictionary(t => t.Key, t => t.Value.Result);
+
+        // Copy-on-write: the UI thread reads LastResults while a switch runs.
+        var merged = new Dictionary<LeverKind, LeverResult>(State.LastResults);
         foreach (var (kind, result) in results)
         {
-            State.LastResults[kind] = result;
+            merged[kind] = result;
         }
+
+        State.LastResults = merged;
 
         State.LastApplied = _time.GetUtcNow();
         var outcome = new SwitchOutcome(mode, results);
