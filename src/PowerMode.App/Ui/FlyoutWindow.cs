@@ -14,7 +14,7 @@ namespace PowerMode.App.Ui;
 /// </summary>
 internal sealed class FlyoutWindow : Window
 {
-    private const double MaxFlyoutHeight = 600;
+    public const double MaxFlyoutHeight = 600;
 
     private readonly Func<FlyoutConfig> _config;
     private IntPtr _handle;

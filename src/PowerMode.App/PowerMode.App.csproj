@@ -18,6 +18,8 @@
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <!-- WinForms ImplicitUsings would clash with WPF types; usings are explicit -->
     <ImplicitUsings>disable</ImplicitUsings>
+    <!-- The UI is English only: do not ship the framework's translated resources. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
@@ -25,6 +27,7 @@
     <SelfContained>true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <PublishReadyToRun>true</PublishReadyToRun>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <DebugType>none</DebugType>
   </PropertyGroup>
 

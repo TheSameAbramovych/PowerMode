@@ -1,3 +1,4 @@
+using System.Text;
 using PowerMode.App.Infrastructure;
 using PowerMode.App.Native;
 using PowerMode.Core;
@@ -19,8 +20,14 @@ internal static class CliRunner
     {
         if (Kernel32.GetStdHandle(Kernel32.StdOutputHandle) == IntPtr.Zero)
         {
+            // Not redirected: write to the parent console (Unicode via WriteConsoleW).
             Kernel32.AttachConsole(Kernel32.AttachParentProcess);
+            return;
         }
+
+        // Redirected to a pipe or file: write UTF-8 so "·" survives.
+        Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true });
+        Console.SetError(new StreamWriter(Console.OpenStandardError(), new UTF8Encoding(false)) { AutoFlush = true });
     }
 
     public static int Help(CliOptions options)

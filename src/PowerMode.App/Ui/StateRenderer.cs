@@ -54,6 +54,7 @@ internal static class StateRenderer
         {
             CornerRadius = new CornerRadius(8),
             BorderThickness = new Thickness(1),
+            MaxHeight = FlyoutWindow.MaxFlyoutHeight,
             Child = new FlyoutView { DataContext = model },
         };
         frame.SetResourceReference(Border.BackgroundProperty, Palette.Background);
