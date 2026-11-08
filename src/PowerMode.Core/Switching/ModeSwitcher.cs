@@ -93,6 +93,7 @@ public sealed class ModeSwitcher : IDisposable
             if (mode == PowerModeKind.Grid && outcome.FailedCount == 0 && State.Snapshot is not null)
             {
                 State.Snapshot = null;
+                State.ClosedApps.Clear();
                 _log.Write(Category, "Baseline restored and cleared");
             }
 

@@ -1,0 +1,84 @@
+using PowerMode.App.Infrastructure;
+using PowerMode.App.Levers;
+using PowerMode.Core;
+using PowerMode.Core.Config;
+using PowerMode.Core.Levers;
+using PowerMode.Core.Logging;
+using PowerMode.Core.Planning;
+using PowerMode.Core.Presentation;
+using PowerMode.Core.State;
+using PowerMode.Core.Switching;
+
+namespace PowerMode.App;
+
+/// <summary>A switch being applied: which levers started, which still run, and the results so far.</summary>
+internal sealed class SwitchInProgress(PowerModeKind mode, IReadOnlySet<LeverKind> started)
+{
+    public PowerModeKind Mode { get; } = mode;
+
+    public IReadOnlySet<LeverKind> Started { get; } = started;
+
+    public HashSet<LeverKind> Running { get; } = [.. started];
+
+    public Dictionary<LeverKind, LeverResult> Finished { get; } = [];
+}
+
+/// <summary>Composition root shared by the tray app and the CLI commands.</summary>
+internal sealed class AppServices : IDisposable
+{
+    private AppServices()
+    {
+        Log = new FileLog(AppPaths.LogDirectory, TimeProvider.System);
+        Log.Prune();
+        Config = new ConfigStore(AppPaths.ConfigFile, Log);
+        Config.Load();
+        LeverSet = new LeverSet(() => Config.Current, Log);
+        Switcher = new ModeSwitcher(LeverSet.Levers, new StateStore(AppPaths.StateFile, Log), () => Config.Current, () => Elevation.IsElevated, TimeProvider.System, Log);
+        Live = new LiveProbe(LeverSet.Nvml, LeverSet.Docker);
+        Autostart = new AutostartTask(LeverSet.Runner);
+    }
+
+    public FileLog Log { get; }
+
+    public ConfigStore Config { get; }
+
+    public LeverSet LeverSet { get; }
+
+    public ModeSwitcher Switcher { get; }
+
+    public LiveProbe Live { get; }
+
+    public AutostartTask Autostart { get; }
+
+    public static AppServices Create() => new();
+
+    /// <summary>The flyout/status state for the current mode (or the one being applied), results and live values.</summary>
+    public FlyoutState BuildState(LiveValues live, bool startWithWindows, SwitchInProgress? progress = null)
+    {
+        var state = Switcher.State;
+        var mode = progress?.Mode ?? state.Mode;
+        var target = TargetPlanner.Plan(mode, Config.Current, state.Snapshot, state.OptionsFor(mode));
+        var results = progress is null
+            ? state.LastResults
+            : state.LastResults.Where(r => !progress.Started.Contains(r.Key)).Concat(progress.Finished).ToDictionary(r => r.Key, r => r.Value);
+        return FlyoutStateBuilder.Build(new FlyoutInput(
+            target,
+            results,
+            progress?.Running ?? new HashSet<LeverKind>(),
+            live,
+            state.Since?.ToLocalTime(),
+            DateTimeOffset.Now,
+            Elevation.IsElevated,
+            state.OptionsFor(PowerModeKind.Station).KeepDocker,
+            startWithWindows,
+            Config.Current.Hotkeys));
+    }
+
+    public void Dispose()
+    {
+        Live.Dispose();
+        Switcher.Dispose();
+        LeverSet.Dispose();
+        Config.Dispose();
+    }
+}

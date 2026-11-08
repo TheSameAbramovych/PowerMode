@@ -1,13 +1,9 @@
-﻿using System.Configuration;
-using System.Data;
 using System.Windows;
 
 namespace PowerMode.App;
 
-/// <summary>
-/// Interaction logic for App.xaml
-/// </summary>
-public partial class App : Application
+/// <summary>WPF application object: Fluent theme (ThemeMode=System) and the shared styles. Started by <see cref="Program"/>.</summary>
+internal sealed partial class App : Application
 {
+    public App() => InitializeComponent();
 }
-

@@ -1,2 +1,9 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PowerMode.App/PowerMode.App.csproj" />
+    <Project Path="src/PowerMode.Core/PowerMode.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PowerMode.Core.Tests/PowerMode.Core.Tests.csproj" />
+  </Folder>
 </Solution>

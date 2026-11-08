@@ -30,6 +30,9 @@ public sealed class PersistedState
 
     public List<EfficiencyRecord> EfficiencyApplied { get; set; } = [];
 
+    /// <summary>Process names PowerMode closed itself; only these are relaunched (an app the user quit stays quit).</summary>
+    public List<string> ClosedApps { get; set; } = [];
+
     public Dictionary<LeverKind, LeverResult> LastResults { get; set; } = [];
 
     public ModeOptions OptionsFor(PowerModeKind mode)

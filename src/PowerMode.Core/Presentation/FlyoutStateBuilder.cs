@@ -162,7 +162,7 @@ public static class FlyoutStateBuilder
     {
         LeverRow.Cpu => ["Your power scheme"],
         LeverRow.Gpu => ["Your power limit"],
-        LeverRow.Monitor => ["Your brightness" + Dot + "refresh rate"],
+        LeverRow.Monitor => ["Your settings"],
         LeverRow.Display => ["Your timeouts"],
         LeverRow.Docker => [target.Docker is { Running: true } d && d.ContainersToStart.Count > 0 ? $"Running{Dot}{Count(d.ContainersToStart.Count, "container")}" : "As you left it"],
         LeverRow.Apps => AppsGrid(target),
@@ -173,10 +173,7 @@ public static class FlyoutStateBuilder
 
     private static string[] AppsGrid(TargetState target)
     {
-        var lines = new List<string>
-        {
-            target.Apps.Relaunch.Count > 0 ? "Relaunched: " + FriendlyNames.ProcessList(target.Apps.Relaunch.Select(p => p.Name)) : "Nothing closed",
-        };
+        var lines = new List<string> { "Nothing closed" };
         if (target.Wallpaper == WallpaperAction.Play)
         {
             lines.Add("Wallpaper Engine playing");

@@ -1,0 +1,97 @@
+using PowerMode.App.Infrastructure;
+using PowerMode.App.Native;
+using PowerMode.Core;
+using PowerMode.Core.Cli;
+using PowerMode.Core.Presentation;
+
+namespace PowerMode.App;
+
+/// <summary>The console commands: --status, --dry-run, --mode without a running instance, autostart.</summary>
+internal static class CliRunner
+{
+    public const int ExitOk = 0;
+    public const int ExitError = 1;
+    public const int ExitFailedLevers = 2;
+    private static readonly TimeSpan CounterSampleGap = TimeSpan.FromSeconds(1);
+
+    /// <summary>A WinExe has no console: attach to the parent's when output is not redirected.</summary>
+    public static void AttachConsole()
+    {
+        if (Kernel32.GetStdHandle(Kernel32.StdOutputHandle) == IntPtr.Zero)
+        {
+            Kernel32.AttachConsole(Kernel32.AttachParentProcess);
+        }
+    }
+
+    public static int Help(CliOptions options)
+    {
+        if (options.Error is { } error)
+        {
+            Console.Error.WriteLine(error);
+            Console.Error.WriteLine();
+        }
+
+        Console.WriteLine(CliOptions.Usage);
+        return options.IsValid ? ExitOk : ExitError;
+    }
+
+    public static async Task<int> StatusAsync()
+    {
+        using var services = AppServices.Create();
+        await Task.Delay(CounterSampleGap).ConfigureAwait(false);
+        var live = await services.Live.ReadAsync(CancellationToken.None).ConfigureAwait(false);
+        var autostart = await services.Autostart.IsInstalledAsync(CancellationToken.None).ConfigureAwait(false);
+        Console.Write(TextReports.Status(services.BuildState(live, autostart)));
+        return ExitOk;
+    }
+
+    public static async Task<int> DryRunAsync(PowerModeKind mode)
+    {
+        using var services = AppServices.Create();
+        var report = await services.Switcher.DryRunAsync(mode).ConfigureAwait(false);
+        Console.Write(TextReports.DryRun(report));
+        return ExitOk;
+    }
+
+    /// <summary>--mode without a running tray instance: apply here, print the table, exit.</summary>
+    public static async Task<int> ApplyAsync(PowerModeKind mode)
+    {
+        using var services = AppServices.Create();
+        var outcome = await services.Switcher.SwitchAsync(mode).ConfigureAwait(false);
+        var live = await services.Live.ReadAsync(CancellationToken.None).ConfigureAwait(false);
+        var autostart = await services.Autostart.IsInstalledAsync(CancellationToken.None).ConfigureAwait(false);
+        Console.Write(TextReports.Status(services.BuildState(live, autostart)));
+        return outcome.FailedCount == 0 ? ExitOk : ExitFailedLevers;
+    }
+
+    public static async Task<int> AutostartAsync(bool install)
+    {
+        if (!Elevation.IsElevated)
+        {
+            // Creating a task with highest privileges needs an administrator: re-run this command elevated.
+            var flag = install ? CliOptions.InstallAutostartFlag : CliOptions.UninstallAutostartFlag;
+            var code = Elevation.StartElevated([flag], waitForExit: true);
+            Console.WriteLine(code switch
+            {
+                null => "Cancelled at the administrator prompt.",
+                ExitOk => install ? "Autostart task installed." : "Autostart task removed.",
+                _ => $"Failed (exit code {code}); see the log in {AppPaths.LogDirectory}.",
+            });
+            return code ?? ExitError;
+        }
+
+        using var services = AppServices.Create();
+        var error = install
+            ? await services.Autostart.InstallAsync(CancellationToken.None).ConfigureAwait(false)
+            : await services.Autostart.UninstallAsync(CancellationToken.None).ConfigureAwait(false);
+        services.Log.Write("autostart", error ?? (install ? "Installed" : "Removed"));
+        if (error is not null)
+        {
+            Console.Error.WriteLine(error);
+            return ExitError;
+        }
+
+        Console.WriteLine(install ? "Autostart task installed." : "Autostart task removed.");
+        return ExitOk;
+    }
+}
