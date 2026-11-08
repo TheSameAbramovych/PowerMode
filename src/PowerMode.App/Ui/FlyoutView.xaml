@@ -54,7 +54,7 @@
             </TextBlock>
 
             <!-- 6. Elevation banner -->
-            <Border Background="{DynamicResource PmWarningFill}" CornerRadius="6" Padding="10,8" Margin="0,10,4,0"
+            <Border Background="{DynamicResource PmWarningFill}" CornerRadius="6" Padding="10,6" Margin="0,8,4,0"
                     Visibility="{Binding Banner, Converter={StaticResource NullToCollapsed}}">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -69,7 +69,7 @@
                                Foreground="{DynamicResource PmWarning}" Margin="0,1,8,0" VerticalAlignment="Top" />
                     <TextBlock Grid.Column="1" Text="{Binding Banner}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
                     <Button Grid.Row="1" Grid.Column="1" Style="{StaticResource PmAccentButton}" Content="Restart as administrator"
-                            HorizontalAlignment="Left" Margin="0,8,0,0" Click="OnRestartElevated" />
+                            HorizontalAlignment="Left" Margin="0,6,0,0" Click="OnRestartElevated" />
                 </Grid>
             </Border>
 
@@ -78,7 +78,7 @@
                 <ItemsControl ItemsSource="{Binding Rows}" Focusable="False">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type ui:RowViewModel}">
-                            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" MinHeight="40" Padding="0,8,0,8">
+                            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" MinHeight="40" Padding="0,6,0,6">
                                 <Grid VerticalAlignment="Center">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="84" />
@@ -105,7 +105,7 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <TextBlock Text="{Binding FailureReason}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"
+                                        <TextBlock Text="{Binding FailureReason}" FontSize="12" TextWrapping="Wrap" Margin="0,1,0,0"
                                                    Foreground="{DynamicResource PmWarning}"
                                                    Visibility="{Binding FailureReason, Converter={StaticResource NullToCollapsed}}" />
                                     </StackPanel>
@@ -121,7 +121,7 @@
                                             </TextBlock>
                                         </StackPanel>
                                         <CheckBox Style="{StaticResource PmSwitch}" Content="Keep running" IsChecked="{Binding KeepDocker, Mode=TwoWay}"
-                                                  HorizontalAlignment="Right" Margin="0,8,0,0" Click="OnKeepDocker"
+                                                  HorizontalAlignment="Right" Margin="0,4,0,0" Click="OnKeepDocker"
                                                   Visibility="{Binding ShowKeepDocker, Converter={StaticResource BoolToVisibility}}" />
                                     </StackPanel>
                                 </Grid>
