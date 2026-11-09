@@ -55,6 +55,34 @@
         </Style.Triggers>
     </Style>
 
+    <!-- A tab of the settings pages: the selected one (Tag = True) is semibold with an accent underline. -->
+    <Style x:Key="PmTabButton" TargetType="Button">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Foreground" Value="{DynamicResource PmMuted}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <StackPanel Background="Transparent">
+                        <ContentPresenter Margin="2,2,2,4" TextElement.Foreground="{TemplateBinding Foreground}" />
+                        <Border x:Name="Underline" Height="2" CornerRadius="1" Background="Transparent" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+                            <Setter TargetName="Underline" Property="Background" Value="{DynamicResource PmAccent}" />
+                        </DataTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource PmText}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- One segment of the mode selector; DataContext is a ModeItem. -->
     <Style x:Key="PmModeButton" TargetType="Button">
         <Setter Property="Height" Value="44" />

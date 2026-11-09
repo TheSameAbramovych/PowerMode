@@ -262,7 +262,7 @@ public sealed class LeverSettingsTests
         Assert.Equal("80 %", cpu.Options.Single(o => o.Value == 80).Label);
         var gpu = rows.Single(r => r.Setting == LeverSetting.GpuLimitW);
         Assert.True(gpu.IsNumeric);
-        Assert.Equal("60–132 W, watts", gpu.Note);
+        Assert.Equal("Watts, range 60–132 W", gpu.Note);
         Assert.Equal(["Keep", "59 Hz", "60 Hz", "144 Hz"], rows.Single(r => r.Setting == LeverSetting.RefreshHz).Options.Select(o => o.Label));
         Assert.Equal((0, 1), (rows.Single(r => r.Setting == LeverSetting.SecondaryDisplays).Station, rows.Single(r => r.Setting == LeverSetting.SecondaryDisplays).Reserve));
         var hibernate = rows.Single(r => r.Setting == LeverSetting.HibernateMinutes);

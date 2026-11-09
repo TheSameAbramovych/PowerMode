@@ -70,7 +70,7 @@ public static class LeverSettings
         {
             Row(config, LeverSetting.CpuMaxPercent, "CPU max", null, true, false, [.. Steps(MinCpuPercent, 100, CpuStep).Select(Percent)]),
             Row(config, LeverSetting.Boost, "CPU boost", null, true, false, [new(0, "Off"), new(1, "On")]),
-            Row(config, LeverSetting.GpuLimitW, "GPU limit", machine.Gpu is { } gpu ? $"{gpu.RangeText}, watts" : MachineInfo.NoNvidiaGpu + " detected", machine.Gpu is not null, true, []),
+            Row(config, LeverSetting.GpuLimitW, "GPU limit", machine.Gpu is { } gpu ? $"Watts, range {gpu.RangeText}" : MachineInfo.NoNvidiaGpu + " detected", machine.Gpu is not null, true, []),
             Row(config, LeverSetting.BrightnessPercent, "Brightness", null, true, false, [Keep, .. Steps(0, 100, BrightnessStep).Select(Percent)]),
             Row(config, LeverSetting.RefreshHz, "Refresh rate", null, true, false, [Keep, .. machine.RefreshRates.Distinct().Order().Select(Hz)]),
             Row(config, LeverSetting.SecondaryDisplays, "Other displays", machine.Monitors.Count > 1 ? null : "One display connected", true, false, [new(0, "On"), new(1, "Off")]),

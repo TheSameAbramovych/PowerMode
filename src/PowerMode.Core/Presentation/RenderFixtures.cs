@@ -8,8 +8,16 @@ using PowerMode.Core.State;
 
 namespace PowerMode.Core.Presentation;
 
-/// <summary>A flyout state to render; with <see cref="Settings"/> the Apps settings page is shown instead of the lever table, with <see cref="Feedback"/> on it; <see cref="CalibrationReading"/> shows the power card's calibration form with that text.</summary>
-public sealed record RenderFixture(string FileName, FlyoutState State, bool LightTheme, AppSettingsPage? Settings = null, SettingsFeedback? Feedback = null, string? CalibrationReading = null);
+/// <summary>A flyout state to render; with <see cref="Settings"/> the Apps settings page is shown instead of the lever table, with <see cref="Feedback"/> on it; <see cref="CalibrationReading"/> shows the power card's calibration form with that text; <see cref="Levers"/> shows the Levers page for <see cref="Machine"/>.</summary>
+public sealed record RenderFixture(
+    string FileName,
+    FlyoutState State,
+    bool LightTheme,
+    AppSettingsPage? Settings = null,
+    SettingsFeedback? Feedback = null,
+    string? CalibrationReading = null,
+    IReadOnlyList<LeverSettingRow>? Levers = null,
+    MachineInfo? Machine = null);
 
 /// <summary>Fake but realistic flyout states for <c>--render-states</c>. Built from the default config; touches nothing.</summary>
 public static class RenderFixtures
@@ -28,6 +36,8 @@ public static class RenderFixtures
     public const string HeroGrid = "hero-grid.png";
     public const string HeroCalibrating = "hero-calibrating.png";
     public const string StationTwoMonitors = "station-two-monitors.png";
+    public const string SettingsLevers = "settings-levers.png";
+    public const string SettingsLeversLight = "settings-levers-light.png";
 
     /// <summary>An app with a long name, closed in Reserve, so the settings render shows how such a name wraps.</summary>
     public const string LongName = "Adobe Creative Cloud Experience";
@@ -41,6 +51,10 @@ public static class RenderFixtures
 
     /// <summary>A calibration made this morning (the hero fixtures show "Calibrated 10:31").</summary>
     public static readonly PowerCalibration Calibration = new(14, new DateTimeOffset(2026, 11, 9, 10, 31, 0, TimeSpan.FromHours(2)));
+
+    /// <summary>The owner's PC as the Levers page shows it (two monitors, the NVIDIA card's 60–132 W range).</summary>
+    public static readonly MachineInfo OwnerPc = new(
+        "AMD Ryzen 7 2700 Eight-Core Processor", 3200, new GpuInfo("NVIDIA GeForce RTX 3060 Ti", 60, 132), ["M27Q2", "T24i-30"], [59, 60, 75, 100, 120, 144, 165, 200], true, true, false, "1.0.0");
 
     public static IReadOnlyList<RenderFixture> All(AppConfig? config = null)
     {
@@ -86,6 +100,8 @@ public static class RenderFixtures
             new(SettingsAppsSaved, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false, SettingsPage(config), SettingsFeedback.SavedAt(Now)),
             new(HeroGrid, Build(config, PowerModeKind.Grid, null, _ => { }, [], gridLive, isElevated: true, Calibration), false),
             new(HeroCalibrating, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true, Calibration), false, CalibrationReading: "186"),
+            new(SettingsLevers, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false, Feedback: SettingsFeedback.SavedAt(Now), Levers: LeverSettings.Build(config, OwnerPc), Machine: OwnerPc),
+            new(SettingsLeversLight, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), true, Levers: LeverSettings.Build(config, OwnerPc), Machine: OwnerPc),
             new(StationTwoMonitors, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive with { Monitors = [new MonitorLive("M27Q2", 35, 59), new MonitorLive("T24i-30", 35, 60)] }, isElevated: true), false),
         ];
     }

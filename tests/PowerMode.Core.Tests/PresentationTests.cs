@@ -286,11 +286,12 @@ public sealed class PresentationTests
             [
                 RenderFixtures.Grid, RenderFixtures.GridRestored, RenderFixtures.Station, RenderFixtures.Reserve, RenderFixtures.StationApplying,
                 RenderFixtures.StationFailed, RenderFixtures.ReserveFailed, RenderFixtures.ReserveLight, RenderFixtures.SettingsApps, RenderFixtures.SettingsAppsLight,
-                RenderFixtures.SettingsAppsSaved, RenderFixtures.HeroGrid, RenderFixtures.HeroCalibrating, RenderFixtures.StationTwoMonitors,
+                RenderFixtures.SettingsAppsSaved, RenderFixtures.HeroGrid, RenderFixtures.HeroCalibrating, RenderFixtures.SettingsLevers, RenderFixtures.SettingsLeversLight, RenderFixtures.StationTwoMonitors,
             ],
             fixtures.Select(f => f.FileName));
 
-        Assert.All(fixtures.Where(f => f.FileName.StartsWith("settings", StringComparison.Ordinal)), f => Assert.NotNull(f.Settings));
+        Assert.All(fixtures.Where(f => f.FileName.StartsWith("settings-apps", StringComparison.Ordinal)), f => Assert.NotNull(f.Settings));
+        Assert.All(fixtures.Where(f => f.FileName.StartsWith("settings-levers", StringComparison.Ordinal)), f => Assert.Equal(10, f.Levers!.Count));
         var page = fixtures.Single(f => f.FileName == RenderFixtures.SettingsApps).Settings!;
         Assert.Equal(AppChoice.Efficiency, page.Rows.Single(r => r.Name == "Telegram").Station);
         Assert.Contains(page.Rows, r => r.Name == "discord" && r.Station == AppChoice.Keep);

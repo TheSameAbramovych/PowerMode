@@ -134,7 +134,7 @@ internal sealed class FlyoutWindow : Window
             // Esc leaves the Apps settings page first, then closes the flyout.
             if (settings is not null)
             {
-                settings.IsSettingsOpen = false;
+                settings.Page = FlyoutPage.Main;
             }
             else
             {

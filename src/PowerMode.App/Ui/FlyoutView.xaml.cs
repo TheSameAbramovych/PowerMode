@@ -32,6 +32,10 @@ internal sealed partial class FlyoutView : UserControl
 
     public event EventHandler? BackRequested;
 
+    public event EventHandler? AppsTabRequested;
+
+    public event EventHandler? LeversTabRequested;
+
     public event EventHandler? AddRequested;
 
     public event EventHandler? RestartElevatedRequested;
@@ -87,6 +91,20 @@ internal sealed partial class FlyoutView : UserControl
     private void OnSettings(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnBack(object sender, RoutedEventArgs e) => BackRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnAppsTab(object sender, RoutedEventArgs e) => AppsTabRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnLeversTab(object sender, RoutedEventArgs e) => LeversTabRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Enter commits a typed number (the GPU limit) like leaving the box does.</summary>
+    private void OnNumberKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && sender is TextBox box)
+        {
+            box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            e.Handled = true;
+        }
+    }
 
     private void OnAdd(object sender, RoutedEventArgs e) => AddRequested?.Invoke(this, EventArgs.Empty);
 

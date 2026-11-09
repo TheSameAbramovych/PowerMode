@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="clr-namespace:PowerMode.App.Ui"
              xmlns:presentation="clr-namespace:PowerMode.Core.Presentation;assembly=PowerMode.Core"
+             xmlns:settings="clr-namespace:PowerMode.Core.Settings;assembly=PowerMode.Core"
              x:ClassModifier="internal"
              Width="380"
              FontFamily="{StaticResource PmTextFont}"
@@ -283,12 +284,12 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Apps settings page: replaces the lever table; only its app list scrolls. -->
+        <!-- Settings pages (Apps, Levers): replace the lever table; only the app list scrolls. -->
         <StackPanel Margin="16,8,12,8" Visibility="{Binding IsSettingsOpen, Converter={StaticResource BoolToVisibility}}">
             <Grid Margin="0,0,0,2">
                 <StackPanel Orientation="Horizontal">
                     <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Back}" ToolTip="Back (Esc)" Click="OnBack" Margin="-6,0,2,0" />
-                    <TextBlock Text="Apps" FontFamily="{StaticResource PmDisplayFont}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <TextBlock Text="Settings" FontFamily="{StaticResource PmDisplayFont}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <TextBlock Text="{Binding Settings.Saved}" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" Margin="0,0,8,0"
@@ -296,48 +297,112 @@
                     <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Close}" ToolTip="Close" Click="OnClose" />
                 </StackPanel>
             </Grid>
-            <TextBlock Text="What Station and Reserve do with each app. A change for the current mode applies at once."
-                       FontSize="12" Foreground="{DynamicResource PmMuted}" TextWrapping="Wrap" Margin="0,0,4,8" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Style="{StaticResource PmTabButton}" Content="Apps" Tag="{Binding IsAppsOpen}" Click="OnAppsTab" />
+                <Button Style="{StaticResource PmTabButton}" Content="Levers" Tag="{Binding IsLeversOpen}" Click="OnLeversTab" Margin="12,0,0,0" />
+            </StackPanel>
 
-            <Grid Margin="0,0,4,4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
-                    <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="App" FontSize="12" Foreground="{DynamicResource PmMuted}" />
-                <TextBlock Grid.Column="1" Text="Station" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="8,0,0,0" />
-                <TextBlock Grid.Column="2" Text="Reserve" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="8,0,0,0" />
-            </Grid>
-
-            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,1,0,1" Margin="0,0,4,0">
-                <Grid MinHeight="44">
+            <!-- Apps page. -->
+            <StackPanel Visibility="{Binding IsAppsOpen, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="What Station and Reserve do with each app. A change for the current mode applies at once."
+                           FontSize="12" Foreground="{DynamicResource PmMuted}" TextWrapping="Wrap" Margin="0,0,4,8" />
+    
+                <Grid Margin="0,0,4,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
                         <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Wallpaper Engine" FontSize="13" TextWrapping="Wrap" />
-                        <TextBlock Text="wallpaper64.exe" FontSize="11" Foreground="{DynamicResource PmMuted}" />
-                    </StackPanel>
-                    <ComboBox Grid.Column="1" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
-                              SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="Wallpaper Engine in Station"
-                              ItemsSource="{x:Static ui:SettingsViewModel.WallpaperChoices}" SelectedValue="{Binding Settings.PauseWallpaperStation}" />
-                    <ComboBox Grid.Column="2" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
-                              SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="Wallpaper Engine in Reserve"
-                              ItemsSource="{x:Static ui:SettingsViewModel.WallpaperChoices}" SelectedValue="{Binding Settings.PauseWallpaperReserve}" />
+                    <TextBlock Text="App" FontSize="12" Foreground="{DynamicResource PmMuted}" />
+                    <TextBlock Grid.Column="1" Text="Station" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="8,0,0,0" />
+                    <TextBlock Grid.Column="2" Text="Reserve" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="8,0,0,0" />
                 </Grid>
-            </Border>
+    
+                <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,1,0,1" Margin="0,0,4,0">
+                    <Grid MinHeight="44">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                            <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Wallpaper Engine" FontSize="13" TextWrapping="Wrap" />
+                            <TextBlock Text="wallpaper64.exe" FontSize="11" Foreground="{DynamicResource PmMuted}" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                  SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="Wallpaper Engine in Station"
+                                  ItemsSource="{x:Static ui:SettingsViewModel.WallpaperChoices}" SelectedValue="{Binding Settings.PauseWallpaperStation}" />
+                        <ComboBox Grid.Column="2" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                  SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="Wallpaper Engine in Reserve"
+                                  ItemsSource="{x:Static ui:SettingsViewModel.WallpaperChoices}" SelectedValue="{Binding Settings.PauseWallpaperReserve}" />
+                    </Grid>
+                </Border>
+    
+                <!-- A divider closes the list, also when its last visible row is cut by scrolling. -->
+                <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" Margin="0,0,4,0">
+                    <ScrollViewer MaxHeight="{StaticResource PmAppListHeight}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Focusable="False" Margin="0,0,-12,0">
+                        <!-- The scroll bar sits in the 12 px to the right of the columns, never over a choice box. -->
+                        <ItemsControl ItemsSource="{Binding Settings.Rows}" Focusable="False" Margin="0,0,12,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type ui:AppRowViewModel}">
+                                    <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" MinHeight="44" Padding="0,3">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                                                <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding DisplayName}" FontSize="13" TextWrapping="Wrap" LineHeight="16" LineStackingStrategy="BlockLineHeight" />
+                                                <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="{DynamicResource PmMuted}" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <ComboBox Grid.Column="1" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                                      SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="{Binding DisplayName, StringFormat={}{0} in Station}"
+                                                      ItemsSource="{x:Static ui:SettingsViewModel.AppChoices}" SelectedValue="{Binding Station}" />
+                                            <ComboBox Grid.Column="2" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                                      SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="{Binding DisplayName, StringFormat={}{0} in Reserve}"
+                                                      ItemsSource="{x:Static ui:SettingsViewModel.AppChoices}" SelectedValue="{Binding Reserve}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+    
+                <Grid Margin="0,10,4,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="AddBox" Text="{Binding Settings.AddText, UpdateSourceTrigger=PropertyChanged}" FontSize="13" VerticalContentAlignment="Center"
+                             AutomationProperties.Name="Add process" KeyDown="OnAddKey" />
+                    <TextBlock Text="Add process… (name without .exe)" FontSize="13" Foreground="{DynamicResource PmMuted}" IsHitTestVisible="False"
+                               VerticalAlignment="Center" Margin="12,0,0,0"
+                               Visibility="{Binding Settings.AddText, Converter={StaticResource EmptyToVisible}}" />
+                    <Button Grid.Column="1" Style="{StaticResource PmAccentButton}" Content="Add" Margin="8,0,0,0" Padding="16,6" Click="OnAdd" />
+                </Grid>
+            </StackPanel>
 
-            <!-- A divider closes the list, also when its last visible row is cut by scrolling. -->
-            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" Margin="0,0,4,0">
-                <ScrollViewer MaxHeight="{StaticResource PmAppListHeight}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                              Focusable="False" Margin="0,0,-12,0">
-                    <!-- The scroll bar sits in the 12 px to the right of the columns, never over a choice box. -->
-                    <ItemsControl ItemsSource="{Binding Settings.Rows}" Focusable="False" Margin="0,0,12,0">
+            <!-- Levers page: what Station and Reserve set, the CPU note and This PC. -->
+            <StackPanel Visibility="{Binding IsLeversOpen, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="What Station and Reserve set. A change for the current mode applies at once."
+                           FontSize="12" Foreground="{DynamicResource PmMuted}" TextWrapping="Wrap" Margin="0,0,4,8" />
+                <Grid Margin="0,0,4,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                        <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Setting" FontSize="12" Foreground="{DynamicResource PmMuted}" />
+                    <TextBlock Grid.Column="1" Text="Station" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="8,0,0,0" />
+                    <TextBlock Grid.Column="2" Text="Reserve" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="8,0,0,0" />
+                </Grid>
+                <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,1,0,0" Margin="0,0,4,0">
+                    <ItemsControl ItemsSource="{Binding Levers.Rows}" Focusable="False">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type ui:AppRowViewModel}">
+                            <DataTemplate DataType="{x:Type ui:LeverRowViewModel}">
                                 <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" MinHeight="44" Padding="0,3">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -346,35 +411,55 @@
                                             <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding DisplayName}" FontSize="13" TextWrapping="Wrap" LineHeight="16" LineStackingStrategy="BlockLineHeight" />
-                                            <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="{DynamicResource PmMuted}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Title}" FontSize="13" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Live}" FontSize="11" Foreground="{DynamicResource PmMuted}"
+                                                       Visibility="{Binding Live, Converter={StaticResource NullToCollapsed}}" />
+                                            <TextBlock Text="{Binding Note}" FontSize="11" Foreground="{DynamicResource PmMuted}" TextWrapping="Wrap"
+                                                       Visibility="{Binding Note, Converter={StaticResource NullToCollapsed}}" />
                                         </StackPanel>
                                         <ComboBox Grid.Column="1" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
-                                                  SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="{Binding DisplayName, StringFormat={}{0} in Station}"
-                                                  ItemsSource="{x:Static ui:SettingsViewModel.AppChoices}" SelectedValue="{Binding Station}" />
+                                                  SelectedValuePath="Value" DisplayMemberPath="Label" IsEnabled="{Binding Enabled}"
+                                                  Visibility="{Binding IsChoice, Converter={StaticResource BoolToVisibility}}"
+                                                  AutomationProperties.Name="{Binding Title, StringFormat={}{0} in Station}"
+                                                  ItemsSource="{Binding Options}" SelectedValue="{Binding Station}" />
                                         <ComboBox Grid.Column="2" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
-                                                  SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="{Binding DisplayName, StringFormat={}{0} in Reserve}"
-                                                  ItemsSource="{x:Static ui:SettingsViewModel.AppChoices}" SelectedValue="{Binding Reserve}" />
+                                                  SelectedValuePath="Value" DisplayMemberPath="Label" IsEnabled="{Binding Enabled}"
+                                                  Visibility="{Binding IsChoice, Converter={StaticResource BoolToVisibility}}"
+                                                  AutomationProperties.Name="{Binding Title, StringFormat={}{0} in Reserve}"
+                                                  ItemsSource="{Binding Options}" SelectedValue="{Binding Reserve}" />
+                                        <TextBox Grid.Column="1" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" VerticalContentAlignment="Center"
+                                                 IsEnabled="{Binding Enabled}" Visibility="{Binding IsNumeric, Converter={StaticResource BoolToVisibility}}"
+                                                 AutomationProperties.Name="{Binding Title, StringFormat='{}{0} in Station, watts'}" KeyDown="OnNumberKey"
+                                                 Text="{Binding StationText, UpdateSourceTrigger=LostFocus}" />
+                                        <TextBox Grid.Column="2" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" VerticalContentAlignment="Center"
+                                                 IsEnabled="{Binding Enabled}" Visibility="{Binding IsNumeric, Converter={StaticResource BoolToVisibility}}"
+                                                 AutomationProperties.Name="{Binding Title, StringFormat='{}{0} in Reserve, watts'}" KeyDown="OnNumberKey"
+                                                 Text="{Binding ReserveText, UpdateSourceTrigger=LostFocus}" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                </ScrollViewer>
-            </Border>
+                </Border>
+                <TextBlock Text="{x:Static settings:LeverSettings.CpuNote}" FontSize="12" Foreground="{DynamicResource PmMuted}" TextWrapping="Wrap" Margin="0,8,4,0" />
 
-            <Grid Margin="0,10,4,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBox x:Name="AddBox" Text="{Binding Settings.AddText, UpdateSourceTrigger=PropertyChanged}" FontSize="13" VerticalContentAlignment="Center"
-                         AutomationProperties.Name="Add process" KeyDown="OnAddKey" />
-                <TextBlock Text="Add process… (name without .exe)" FontSize="13" Foreground="{DynamicResource PmMuted}" IsHitTestVisible="False"
-                           VerticalAlignment="Center" Margin="12,0,0,0"
-                           Visibility="{Binding Settings.AddText, Converter={StaticResource EmptyToVisible}}" />
-                <Button Grid.Column="1" Style="{StaticResource PmAccentButton}" Content="Add" Margin="8,0,0,0" Padding="16,6" Click="OnAdd" />
-            </Grid>
+                <TextBlock Text="This PC" FontSize="13" FontWeight="SemiBold" Margin="0,12,4,4" />
+                <ItemsControl ItemsSource="{Binding Levers.Facts}" Focusable="False" Margin="0,0,4,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type ui:FactLine}">
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="112" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PmMuted}" />
+                                <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
             <TextBlock Text="{Binding Settings.Message}" FontSize="12" Foreground="{DynamicResource PmWarning}" TextWrapping="Wrap" Margin="0,4,4,0"
                        Visibility="{Binding Settings.Message, Converter={StaticResource NullToCollapsed}}" />
 
@@ -383,7 +468,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Services, levers and the rest" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" />
+                <TextBlock Text="Services, hotkeys and the rest" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" />
                 <Button Grid.Column="1" Style="{StaticResource PmLinkButton}" Content="Open config.json" Click="OnConfig" />
             </Grid>
         </StackPanel>

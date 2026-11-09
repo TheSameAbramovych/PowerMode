@@ -39,13 +39,13 @@ internal sealed class SettingsController
         _model.Settings.AddText = string.Empty;
         Show(SettingsFeedback.None);
         await ReloadAsync();
-        _model.IsSettingsOpen = true;
+        _model.Page = FlyoutPage.Apps;
     }
 
     /// <summary>Back to the lever table, which shows the lists as saved.</summary>
     public void Close()
     {
-        _model.IsSettingsOpen = false;
+        _model.Page = FlyoutPage.Main;
         _refresh();
     }
 

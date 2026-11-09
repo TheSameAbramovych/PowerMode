@@ -33,7 +33,7 @@ internal static class StateRenderer
         foreach (var fixture in RenderFixtures.All())
         {
             var path = Path.Combine(directory, fixture.FileName);
-            var (bitmap, height) = RenderFlyout(app, fixture.State, fixture.LightTheme, fixture.Settings, fixture.Feedback, fixture.CalibrationReading);
+            var (bitmap, height) = RenderFlyout(app, fixture);
             IconRenderer.SavePng(bitmap, path);
             written.Add(string.Create(CultureInfo.InvariantCulture, $"{path} ({height:0} of {FlyoutWindow.MaxFlyoutHeight:0} px)"));
             if (height > FlyoutWindow.MaxFlyoutHeight)
@@ -96,10 +96,12 @@ internal static class StateRenderer
         return bitmap;
     }
 
-    /// <summary>The framed flyout as the window shows it (the Apps settings page when <paramref name="settings"/> is set), and the height its content needs without the window's maximum.</summary>
-    public static (BitmapSource Bitmap, double ContentHeight) RenderFlyout(App app, FlyoutState state, bool light, AppSettingsPage? settings = null, SettingsFeedback? feedback = null, string? calibrationReading = null)
+    /// <summary>The framed flyout as the window shows the fixture (lever table, Apps or Levers page, calibration form), and the height its content needs without the window's maximum.</summary>
+    public static (BitmapSource Bitmap, double ContentHeight) RenderFlyout(App app, RenderFixture fixture)
     {
         ArgumentNullException.ThrowIfNull(app);
+        ArgumentNullException.ThrowIfNull(fixture);
+        var (state, light, settings, calibrationReading) = (fixture.State, fixture.LightTheme, fixture.Settings, fixture.CalibrationReading);
         app.ThemeMode = light ? ThemeMode.Light : ThemeMode.Dark;
         Palette.Apply(app.Resources, light);
         var model = new FlyoutViewModel();
@@ -108,9 +110,17 @@ internal static class StateRenderer
         if (settings is not null)
         {
             model.Settings.Load(settings);
-            model.Settings.Show(feedback ?? SettingsFeedback.None);
-            model.IsSettingsOpen = true;
+            model.Page = FlyoutPage.Apps;
         }
+
+        if (fixture is { Levers: { } levers, Machine: { } machine })
+        {
+            model.Levers.Load(levers, machine);
+            model.Levers.ShowCpuWatts("≈ 18 W now");
+            model.Page = FlyoutPage.Levers;
+        }
+
+        model.Settings.Show(fixture.Feedback ?? SettingsFeedback.None);
 
         if (calibrationReading is not null)
         {

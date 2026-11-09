@@ -48,6 +48,7 @@ internal sealed class TrayController : IDisposable
     private SingleInstance _instance;
     private readonly SwitchScheduler _queue;
     private readonly SettingsController _settings;
+    private readonly LeversController _levers;
     private SwitchInProgress? _progress;
     private bool _readingLive;
     private bool _disposed;
@@ -65,6 +66,7 @@ internal sealed class TrayController : IDisposable
         _hotkeys = new HotkeyManager(services.Log);
         _queue = new SwitchScheduler(RunSwitchAsync, Shutdown, RestartElevated, services.Log);
         _settings = new SettingsController(services, _model, Refresh);
+        _levers = new LeversController(services, _model, Refresh);
         var view = new FlyoutView { DataContext = _model };
         _flyout = new FlyoutWindow(view, () => _services.Config.Current.Flyout);
         _model.IsPinned = _flyout.IsPinned = services.Switcher.State.FlyoutPinned;
@@ -123,6 +125,8 @@ internal sealed class TrayController : IDisposable
         view.ConfigRequested += (_, _) => OpenConfig();
         view.SettingsRequested += async (_, _) => await _settings.OpenAsync();
         view.BackRequested += (_, _) => _settings.Close();
+        view.AppsTabRequested += async (_, _) => await _settings.OpenAsync();
+        view.LeversTabRequested += (_, _) => _levers.Open();
         view.AddRequested += async (_, _) => await _settings.AddAsync();
         view.RestartElevatedRequested += (_, _) => _queue.RestartElevated();
         view.KeepDockerChanged += async (_, keep) => await SetKeepDockerAsync(keep);
@@ -393,6 +397,11 @@ internal sealed class TrayController : IDisposable
         var state = _services.BuildState(_live, _autostart, _progress, card);
         _model.Update(state);
         var tooltip = FlyoutStateBuilder.Tooltip(mode, _progress is not null, card.TotalW);
+        if (_model.IsLeversOpen)
+        {
+            _levers.ShowCpuWatts(_power.Estimate(_services.Config.Current.Power, saved.PowerCalibration)?.CpuW);
+        }
+
         _tray.Update(mode, _queue.IsSwitching || _progress is not null, _progress is null ? null : _spinnerFrame, _autostart, tooltip);
     }
 
@@ -564,10 +573,14 @@ internal sealed class TrayController : IDisposable
     {
         _hotkeys.Register(_services.Config.Current.Hotkeys);
         Refresh();
-        if (_model.IsSettingsOpen)
+        if (_model.IsAppsOpen)
         {
             // Edited in the file while the page is open: show the file's lists.
             _ = _settings.ReloadAsync();
+        }
+        else if (_model.IsLeversOpen)
+        {
+            _levers.Reload();
         }
     }
 

@@ -115,6 +115,14 @@ internal sealed class RowViewModel : ObservableObject
     }
 }
 
+/// <summary>The page the flyout shows.</summary>
+internal enum FlyoutPage
+{
+    Main,
+    Apps,
+    Levers,
+}
+
 /// <summary>Mutable mirror of <see cref="FlyoutState"/> that updates in place, so animations and tooltips survive refreshes.</summary>
 internal sealed class FlyoutViewModel : ObservableObject
 {
@@ -123,7 +131,7 @@ internal sealed class FlyoutViewModel : ObservableObject
     private string? _banner;
     private string _footer = string.Empty;
     private bool _startWithWindows;
-    private bool _isSettingsOpen;
+    private FlyoutPage _page;
     private bool _isPinned = true;
 
     public FlyoutViewModel()
@@ -150,20 +158,31 @@ internal sealed class FlyoutViewModel : ObservableObject
 
     public PowerViewModel Power { get; } = new();
 
-    /// <summary>The Apps settings page replaces the lever table.</summary>
-    public bool IsSettingsOpen
+    public LeversViewModel Levers { get; } = new();
+
+    /// <summary>What the flyout shows: the lever table, or one of the settings pages (Apps, Levers) instead.</summary>
+    public FlyoutPage Page
     {
-        get => _isSettingsOpen;
+        get => _page;
         set
         {
-            if (Set(ref _isSettingsOpen, value))
+            if (Set(ref _page, value))
             {
                 Raise(nameof(IsMainOpen));
+                Raise(nameof(IsSettingsOpen));
+                Raise(nameof(IsAppsOpen));
+                Raise(nameof(IsLeversOpen));
             }
         }
     }
 
-    public bool IsMainOpen => !_isSettingsOpen;
+    public bool IsMainOpen => _page == FlyoutPage.Main;
+
+    public bool IsSettingsOpen => _page != FlyoutPage.Main;
+
+    public bool IsAppsOpen => _page == FlyoutPage.Apps;
+
+    public bool IsLeversOpen => _page == FlyoutPage.Levers;
 
     /// <summary>The flyout stays open when it loses focus.</summary>
     public bool IsPinned
