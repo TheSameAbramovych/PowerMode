@@ -13,6 +13,10 @@ internal static class MachineProbe
     private const string CpuNameValue = "ProcessorNameString";
     private const string CpuMhzValue = "~MHz";
 
+    /// <summary>PowerMode's version (the product version, without a build suffix), e.g. <c>1.0.0</c>.</summary>
+    public static string Version { get; } =
+        Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "unknown";
+
     public static MachineInfo Read(AppConfig config, LeverSet levers)
     {
         ArgumentNullException.ThrowIfNull(config);
@@ -33,6 +37,6 @@ internal static class MachineProbe
             levers.Docker.IsInstalled,
             File.Exists(config.WallpaperEngine.Path),
             Elevation.IsElevated,
-            Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "unknown");
+            Version);
     }
 }

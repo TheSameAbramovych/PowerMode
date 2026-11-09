@@ -10,13 +10,12 @@ namespace PowerMode.App.Infrastructure;
 
 /// <summary>
 /// The app's log: the daily file first; when it cannot be written, <c>%TEMP%\PowerMode\powermode-fallback.log</c>
-/// and, once, a warning in the Windows Application event log (source <c>PowerMode</c>, when it exists or can be
-/// created). Plus the start-up line that says which process this is and where it writes.
+/// and, once, a warning in the Windows Application event log (source <c>PowerMode</c>, only when it already
+/// exists: PowerMode never registers it). Plus the start-up line that says which process this is and where it writes.
 /// </summary>
 internal static class LogSinks
 {
     private const string EventSource = "PowerMode";
-    private const string EventLogName = "Application";
     private const int BasicInformationClass = 0;
     private const int ParentIdSlot = 5;
     private const int BasicInformationSlots = 6;
@@ -48,10 +47,11 @@ internal static class LogSinks
     {
         try
         {
-            // Creating the source needs administrator rights once; without it there is nothing to write to.
+            // Never create the source: that writes the machine's registry (HKLM) when elevated. Only an existing source
+            // (registered by an administrator, if ever) gets the warning; otherwise the fallback file is all.
             if (!EventLog.SourceExists(EventSource))
             {
-                EventLog.CreateEventSource(EventSource, EventLogName);
+                return;
             }
 
             EventLog.WriteEntry(EventSource, message, EventLogEntryType.Warning);

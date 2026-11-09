@@ -274,7 +274,10 @@ reload, invalid JSON → keep last good + log), `state.json` (current mode, snap
 like Keep Docker, timestamps), `logs\powermode-YYYYMMDD.log` (plain text, every lever action with
 result and duration, 14 days kept; a write that collides with another PowerMode process is retried for up to
 100 ms; a log that still cannot be written goes to `%TEMP%\PowerMode\powermode-fallback.log`, deleted after 14 days
-or past 5 MB). Config schema is documented in README (hotkeys, per-mode lever
+or past 5 MB; the first such failure also goes to the Windows Application event log, but only when the event
+source `PowerMode` already exists: PowerMode never registers it, because registering writes HKLM). The first log
+line of every start names the exe, parent process, elevation and the data and log folders in use. Config schema
+is documented in README (hotkeys, per-mode lever
 values, kill/efficiency/service lists, docker container exclusions, flyout anchor).
 
 ## 7. Tech

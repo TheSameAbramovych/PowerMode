@@ -21,6 +21,10 @@ internal static class Program
             case CliCommand.Help:
                 CliRunner.AttachConsole();
                 return CliRunner.Help(options);
+            case CliCommand.Version:
+                CliRunner.AttachConsole();
+                Console.WriteLine($"PowerMode {MachineProbe.Version}");
+                return CliRunner.ExitOk;
             case CliCommand.RenderStates:
                 CliRunner.AttachConsole();
                 return RenderStates(options.Directory!);

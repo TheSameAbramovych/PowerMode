@@ -16,6 +16,9 @@ public enum CliCommand
     InstallAutostart,
     UninstallAutostart,
     Help,
+
+    /// <summary>Print the version.</summary>
+    Version,
 }
 
 /// <summary>Parsed command line. <see cref="Error"/> is set when the arguments make no sense.</summary>
@@ -31,6 +34,7 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
     public const string InstallAutostartFlag = "--install-autostart";
     public const string UninstallAutostartFlag = "--uninstall-autostart";
     public const string HelpFlag = "--help";
+    public const string VersionFlag = "--version";
 
     public const string Usage = """
         PowerMode - switch this PC between Grid, Station and Reserve.
@@ -46,6 +50,7 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
           PowerMode.exe --install-autostart      start at logon (scheduled task, highest privileges)
           PowerMode.exe --uninstall-autostart    remove that task
           PowerMode.exe --make-icon <file.ico>   write the application icon (developer tool)
+          PowerMode.exe --version                print the version
         """;
 
     /// <summary>Commands a second instance hands to the running one over the pipe.</summary>
@@ -92,7 +97,7 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
                     iconFile = args[i + 1];
                     i++;
                     break;
-                case StatusFlag or DryRunFlag or OpenFlag or QuitFlag or InstallAutostartFlag or UninstallAutostartFlag or HelpFlag or "-h" or "/?":
+                case StatusFlag or DryRunFlag or OpenFlag or QuitFlag or VersionFlag or InstallAutostartFlag or UninstallAutostartFlag or HelpFlag or "-h" or "/?":
                     flags.Add(arg);
                     break;
                 default:
@@ -103,6 +108,11 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
         if (flags.Contains(HelpFlag) || flags.Contains("-h") || flags.Contains("/?"))
         {
             return new CliOptions(CliCommand.Help);
+        }
+
+        if (flags.Contains(VersionFlag))
+        {
+            return new CliOptions(CliCommand.Version);
         }
 
         if (iconFile is not null)

@@ -3,6 +3,7 @@ using PowerMode.App.Infrastructure;
 using PowerMode.App.Native;
 using PowerMode.Core;
 using PowerMode.Core.Cli;
+using PowerMode.Core.Levers;
 using PowerMode.Core.Presentation;
 
 namespace PowerMode.App;
@@ -86,8 +87,21 @@ internal static class CliRunner
         await Task.Delay(CounterSampleGap).ConfigureAwait(false);
         var live = await services.ReadLiveAsync(flyoutVisible: true, allowDdc: true).ConfigureAwait(false);
         var autostart = await services.Autostart.IsInstalledAsync(CancellationToken.None).ConfigureAwait(false);
-        Console.Write(TextReports.Status(services.BuildState(live, autostart, power: services.PowerCardOf(live))));
+        Console.Write(TextReports.Status(services.BuildState(live, autostart, power: services.PowerCardOf(live)), await ActiveSchemeAsync(services).ConfigureAwait(false)));
         return ExitOk;
+    }
+
+    /// <summary>The active scheme for the status table; null when powercfg does not answer.</summary>
+    private static async Task<(Guid Id, string? Name)?> ActiveSchemeAsync(AppServices services)
+    {
+        try
+        {
+            return await services.LeverSet.Powercfg.ActiveSchemeWithNameAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (LeverException)
+        {
+            return null;
+        }
     }
 
     public static async Task<int> DryRunAsync(PowerModeKind mode)
@@ -106,7 +120,7 @@ internal static class CliRunner
         var outcome = await services.Switcher.SwitchAsync(mode).ConfigureAwait(false);
         var live = await services.ReadLiveAsync(flyoutVisible: true, allowDdc: true).ConfigureAwait(false);
         var autostart = await services.Autostart.IsInstalledAsync(CancellationToken.None).ConfigureAwait(false);
-        Console.Write(TextReports.Status(services.BuildState(live, autostart, power: services.PowerCardOf(live))));
+        Console.Write(TextReports.Status(services.BuildState(live, autostart, power: services.PowerCardOf(live)), await ActiveSchemeAsync(services).ConfigureAwait(false)));
         return outcome.FailedCount == 0 ? ExitOk : ExitFailedLevers;
     }
 

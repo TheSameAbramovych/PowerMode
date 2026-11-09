@@ -13,7 +13,9 @@ public static class TextReports
     private const int LiveWidth = 17;
     private const string Bullet = "  - ";
 
-    public static string Status(FlyoutState state)
+    /// <param name="state">The flyout state.</param>
+    /// <param name="activeScheme">The active power scheme (GUID and its name), printed under the CPU row; null when unknown.</param>
+    public static string Status(FlyoutState state, (Guid Id, string? Name)? activeScheme = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         var text = new StringBuilder();
@@ -34,7 +36,10 @@ public static class TextReports
         text.AppendLine(Line(new string('-', NameWidth - 1), new string('-', SetWidth - 1), new string('-', LiveWidth - 1), "------"));
         foreach (var row in state.Rows)
         {
-            var lines = row.Lines.SelectMany(l => Wrap(l, SetWidth - 1)).ToList();
+            IReadOnlyList<string> rowLines = row.Row == Levers.LeverRow.Cpu && activeScheme is { } scheme
+                ? [.. row.Lines, $"Active scheme: {scheme.Name ?? "(no name)"} {scheme.Id}"]
+                : row.Lines;
+            var lines = rowLines.SelectMany(l => Wrap(l, SetWidth - 1)).ToList();
             for (var i = 0; i < lines.Count; i++)
             {
                 var first = i == 0;

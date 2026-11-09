@@ -111,3 +111,50 @@ public sealed class ConsoleTextTests
         Assert.All(text, c => Assert.True(c < 128, $"'{c}' (U+{(int)c:X4}) is not ASCII"));
     }
 }
+
+public sealed class VersionAndSchemeTests
+{
+    [Fact]
+    public void Version_flag_prints_the_version()
+    {
+        Assert.Equal(CliCommand.Version, CliOptions.Parse(["--version"]).Command);
+        Assert.False(CliOptions.Parse(["--version"]).IsForwardable);
+        Assert.Contains("--version", CliOptions.Usage, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Power Scheme GUID: 9897998c-92de-4669-853f-b7cd3ecb2790  (AMD Ryzen Balanced)", "AMD Ryzen Balanced")]
+    [InlineData("GUID схеми живлення: 7d0a5e01-0000-4000-8000-00504d535441  (PowerMode Station)", "PowerMode Station")]
+    [InlineData("Power Scheme GUID: 9897998c-92de-4669-853f-b7cd3ecb2790", null)]
+    public void The_active_scheme_name_is_read_after_its_guid(string output, string? name)
+    {
+        var scheme = Parsing.PowercfgParser.ParseActiveSchemeWithName(output);
+
+        Assert.NotNull(scheme);
+        Assert.Equal(name, scheme.Value.Name);
+        Assert.Null(Parsing.PowercfgParser.ParseActiveSchemeWithName("no scheme"));
+    }
+
+    [Fact]
+    public void Status_prints_the_active_scheme_under_the_cpu_row()
+    {
+        var config = Config.AppConfig.CreateDefault();
+        var state = FlyoutStateBuilder.Build(new FlyoutInput(
+            Planning.TargetPlanner.Plan(PowerModeKind.Grid, config, null),
+            new Dictionary<Levers.LeverKind, Levers.LeverResult>(),
+            new HashSet<Levers.LeverKind>(),
+            LiveValues.Empty,
+            null,
+            DateTimeOffset.UnixEpoch,
+            true,
+            false,
+            false,
+            config.Hotkeys));
+
+        var text = TextReports.Status(state, (Guid.Parse("9897998c-92de-4669-853f-b7cd3ecb2790"), "AMD Ryzen Balanced"));
+
+        Assert.Contains("Active scheme: AMD Ryzen Balanced", text, StringComparison.Ordinal);
+        Assert.Contains("9897998c-92de-4669-853f-b7cd3ecb2790", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Active scheme", TextReports.Status(state), StringComparison.Ordinal);
+    }
+}

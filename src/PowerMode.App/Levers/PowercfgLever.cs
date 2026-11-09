@@ -98,6 +98,10 @@ internal sealed class PowercfgLever : ILever
     public async Task<Guid?> ActiveSchemeAsync(CancellationToken cancellationToken) =>
         PowercfgParser.ParseActiveScheme(await RunAsync(cancellationToken, "/getactivescheme").ConfigureAwait(false));
 
+    /// <summary>The active scheme with its (localized) name, for <c>--status</c>.</summary>
+    public async Task<(Guid Id, string? Name)?> ActiveSchemeWithNameAsync(CancellationToken cancellationToken) =>
+        PowercfgParser.ParseActiveSchemeWithName(await RunAsync(cancellationToken, "/getactivescheme").ConfigureAwait(false));
+
     private async Task<uint?> ReadAcAsync(Guid scheme, PowerSetting setting, CancellationToken cancellationToken)
     {
         var output = await RunAsync(cancellationToken, "/qh", Id(scheme), Id(setting.Subgroup), Id(setting.Setting)).ConfigureAwait(false);

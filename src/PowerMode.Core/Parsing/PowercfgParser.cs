@@ -33,6 +33,26 @@ public static partial class PowercfgParser
         return match.Success ? Guid.Parse(match.Value) : null;
     }
 
+    /// <summary>
+    /// <c>powercfg /getactivescheme</c> → GUID and the name in parentheses after it (localized; shown as it is, never
+    /// used to decide anything). Null when there is no GUID.
+    /// </summary>
+    public static (Guid Id, string? Name)? ParseActiveSchemeWithName(string output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        var match = GuidPattern().Match(output);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var rest = output[(match.Index + match.Length)..];
+        var open = rest.IndexOf('(', StringComparison.Ordinal);
+        var close = rest.LastIndexOf(')');
+        var name = open >= 0 && close > open ? rest[(open + 1)..close].Trim() : null;
+        return (Guid.Parse(match.Value), string.IsNullOrEmpty(name) ? null : name);
+    }
+
     /// <summary><c>powercfg /list</c> → every scheme; the active one ends with <c>*</c>.</summary>
     public static IReadOnlyList<PowerSchemeEntry> ParseSchemeList(string output)
     {
