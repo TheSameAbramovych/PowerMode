@@ -52,7 +52,7 @@ How it works:
 
 - **Tray icon**: always in colour, so you can see that PowerMode runs and in which mode: blue plug (Grid),
   amber battery with a dot (Station), red low battery with a dot (Reserve); a small dot circles while a switch
-  runs. The tooltip shows mode and GPU watts, also while a switch runs. Left click opens or closes the flyout;
+  runs. The tooltip shows the mode and the estimated total (`≈ 142 W`), also while a switch runs. Left click opens or closes the flyout;
   right click has the mode menu, Open, Start with Windows, Open config, Switch to Grid and quit, Quit (keep
   mode). Windows 11 puts new tray icons into the hidden overflow; on its **first start from a folder**
   PowerMode moves its own icon onto the taskbar, once (you can hide it again and it stays hidden). Where
@@ -132,15 +132,29 @@ a task installed by an earlier build ran it below normal (priority 7) and keeps 
 When PowerMode runs elevated, apps it relaunches (Steam, OneDrive, …) and Docker Desktop are started through
 the desktop shell, so they run as you, not as administrator.
 
-## Is it saving anything?
+## How much is the PC drawing?
 
-The power station's own display shows the **total** draw of the PC; read it before and after switching. That
-is the only honest total. PowerMode shows only what it can measure:
+The card at the top of the flyout shows the **estimated** total, e.g. `≈ 142 W`, with `▼ 61 W vs Grid` in
+Station or Reserve, a 10-minute line, and the parts CPU, GPU, Monitor and Other. The tray tooltip shows it too
+(`PowerMode · Station · ≈ 142 W`), and `--status` prints it.
 
-- **GPU** — board power in watts from NVML.
-- **CPU** — effective clock and utility from performance counters (`3.1 GHz · 12 %`). CPU watts cannot be read
-  without a kernel driver, so no watt figure is shown or estimated.
-- **Monitor** — brightness and refresh rate as read back; **Docker** — engine state and running containers.
+**Why an estimate.** The PC's total draw cannot be measured on this desktop: there is no kernel driver and no
+CPU package power. The **power station's own display is the reference**. PowerMode measures what it can and
+estimates the rest, every 2 s:
+
+- **GPU**: board power from NVML (measured, shown without `≈`).
+- **CPU**: `cpuIdleW + cpuSpanW · min(utility, 1.25) · (GHz / cpuBaseGhz)^cpuExponent`, from % Processor
+  Utility and the effective clock.
+- **Monitor**: `monitorBaseW + monitorPerPercentW · brightness`, plus `highRefreshExtraW` above 120 Hz.
+- **Other**: board, RAM, drives, fans, USB (`otherW`), the power supply's losses, and the calibration.
+- Total = `(CPU + GPU + otherW) / psuEfficiency + Monitor + calibration offset`.
+
+**Calibrate** once (link in the card): type what the station's display shows right now; the difference
+becomes an offset (−100…+250 W) added to every estimate, saved in state.json, shown as `Calibrated 10:31`.
+Recalibrate replaces it, Reset removes it. Do it in a steady moment (not during a switch or a game loading).
+
+**vs Grid**: when you leave Grid, the mean of the last minute is kept; in Station or Reserve the card shows the
+difference of the last minute's mean once 30 s have passed since the switch.
 
 ## Files
 
@@ -183,6 +197,12 @@ entry makes the file invalid (the last good config stays). Comments and trailing
 | `docker.engineWaitSeconds` | `120` | How long Grid waits for the Docker engine |
 | `wallpaperEngine.path` | Steam's `wallpaper64.exe` | Used for `-control pause\|play` (falls back to the running process) |
 | `reapplyOnDisplayChange` | `true` | Correct brightness/refresh when Windows changes display settings (at most once a minute) |
+| `power.cpuIdleW` / `power.cpuSpanW` | `15` / `45` | CPU estimate: watts at idle, and the span up to all cores busy at `cpuBaseGhz` |
+| `power.cpuBaseGhz` / `power.cpuExponent` | `3.2` / `2.0` | Base clock and how steeply watts rise with the clock |
+| `power.monitorBaseW` / `power.monitorPerPercentW` | `9` / `0.30` | Monitor estimate: watts at 0 % brightness and per brightness percent |
+| `power.highRefreshExtraW` | `3` | Monitor extra above 120 Hz |
+| `power.otherW` | `40` | Board, RAM, drives, fans, USB |
+| `power.psuEfficiency` | `0.88` | Power supply efficiency (0.5–1); everything but the monitor is divided by it |
 | `fallbackScheme` | Balanced `381b4222-…` | Scheme Grid activates when the one active before is unknown (its read failed, or the state was lost). Set it to your own scheme, e.g. AMD Ryzen Balanced `9897998c-92de-4669-853f-b7cd3ecb2790`; must not be a PowerMode scheme |
 
 Example — dimmer Station, keep Postman open in Reserve:

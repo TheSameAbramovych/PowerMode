@@ -264,3 +264,41 @@ public sealed class PowerCardTests
         Assert.Contains("CPU ≈ 24 W · GPU 21 W · Monitor ≈ 36 W · Other ≈ 61 W", text, StringComparison.Ordinal);
     }
 }
+
+public sealed class PowerTrackerTests
+{
+    private static readonly DateTimeOffset T0 = new(2026, 11, 9, 14, 0, 0, TimeSpan.FromHours(2));
+    private static readonly PowerConfig Config = new();
+
+    [Fact]
+    public void Leaving_grid_takes_the_last_minute_as_reference_and_shows_the_saving_later()
+    {
+        var tracker = new PowerTracker();
+        Assert.Null(tracker.Estimate(Config, null));
+        Assert.Equal((true, (double?)null), tracker.StartSwitch(PowerModeKind.Grid, PowerModeKind.Station, T0));
+
+        var grid = new PowerInputs(10, 3.9, 20, 80, 200);
+        var station = new PowerInputs(10, 2.6, 12, 35, 60);
+        for (var s = 0; s <= 120; s += 2)
+        {
+            tracker.Add(grid, T0.AddSeconds(s), Config, null);
+        }
+
+        var (leaves, reference) = tracker.StartSwitch(PowerModeKind.Grid, PowerModeKind.Station, T0.AddSeconds(121));
+        Assert.True(leaves);
+        Assert.Equal(PowerEstimator.Estimate(Config, grid).TotalW, reference!.Value, 6);
+        Assert.Equal((false, (double?)null), tracker.StartSwitch(PowerModeKind.Station, PowerModeKind.Station, T0.AddSeconds(122)));
+
+        for (var s = 122; s <= 200; s += 2)
+        {
+            tracker.Add(station, T0.AddSeconds(s), Config, null);
+        }
+
+        var card = tracker.Card(Config, null, PowerModeKind.Station, reference, null, T0.AddSeconds(200));
+        Assert.True(card.DeltaIsSaving);
+        Assert.Equal(T0.AddSeconds(121), card.SwitchMarker);
+        Assert.Equal(Math.Round(PowerEstimator.Estimate(Config, station).TotalW), Math.Round(card.TotalW!.Value));
+        Assert.Equal((false, (double?)null), tracker.StartSwitch(PowerModeKind.Station, PowerModeKind.Reserve, T0.AddSeconds(201)));
+        Assert.Same(tracker.History.Points, tracker.History.Points);
+    }
+}
