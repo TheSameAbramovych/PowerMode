@@ -59,10 +59,10 @@ public sealed class TrayPromotionTests
 public sealed class TooltipAndFeedbackTests
 {
     [Fact]
-    public void Tooltip_shows_mode_and_gpu_also_while_applying()
+    public void Tooltip_shows_mode_and_estimated_total_also_while_applying()
     {
-        Assert.Equal("PowerMode · Station · GPU 9 W", FlyoutStateBuilder.Tooltip(PowerModeKind.Station, false, 9.4));
-        Assert.Equal("PowerMode · Applying Reserve… · GPU 12 W", FlyoutStateBuilder.Tooltip(PowerModeKind.Reserve, true, 11.6));
+        Assert.Equal("PowerMode · Station · ≈ 142 W", FlyoutStateBuilder.Tooltip(PowerModeKind.Station, false, 141.6));
+        Assert.Equal("PowerMode · Applying Reserve… · ≈ 98 W", FlyoutStateBuilder.Tooltip(PowerModeKind.Reserve, true, 98.4));
         Assert.Equal("PowerMode · Grid", FlyoutStateBuilder.Tooltip(PowerModeKind.Grid, false, null));
     }
 

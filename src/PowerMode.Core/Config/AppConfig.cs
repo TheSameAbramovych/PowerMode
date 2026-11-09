@@ -1,4 +1,5 @@
 using PowerMode.Core.Model;
+using PowerMode.Core.Power;
 
 namespace PowerMode.Core.Config;
 
@@ -98,6 +99,9 @@ public sealed class AppConfig
 
     public DockerConfig Docker { get; set; } = new();
     public WallpaperEngineConfig WallpaperEngine { get; set; } = new();
+
+    /// <summary>Coefficients of the total-power estimate shown in the flyout and the tooltip.</summary>
+    public PowerConfig Power { get; set; } = new();
 
     /// <summary>Re-apply brightness/refresh when Windows changes display settings (at most once a minute).</summary>
     public bool ReapplyOnDisplayChange { get; set; } = true;

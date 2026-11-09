@@ -49,4 +49,5 @@ public sealed record FlyoutState(
     string? Banner,
     IReadOnlyList<RowState> Rows,
     string Footer,
-    bool StartWithWindows);
+    bool StartWithWindows,
+    Power.PowerCard? Power = null);

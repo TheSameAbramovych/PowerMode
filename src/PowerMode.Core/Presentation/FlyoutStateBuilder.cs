@@ -3,6 +3,7 @@ using PowerMode.Core.Config;
 using PowerMode.Core.Input;
 using PowerMode.Core.Levers;
 using PowerMode.Core.Model;
+using PowerMode.Core.Power;
 
 namespace PowerMode.Core.Presentation;
 
@@ -16,7 +17,8 @@ public sealed record FlyoutInput(
     bool IsElevated,
     bool KeepDocker,
     bool StartWithWindows,
-    HotkeyConfig Hotkeys);
+    HotkeyConfig Hotkeys,
+    PowerCard? Power = null);
 
 /// <summary>Turns a target state, lever results and live values into the text the flyout, CLI and toast show.</summary>
 public static class FlyoutStateBuilder
@@ -61,7 +63,7 @@ public static class FlyoutStateBuilder
             }
         }
 
-        return new FlyoutState(mode, applying, status, tone, banner, rows, Footer(input.Hotkeys), input.StartWithWindows);
+        return new FlyoutState(mode, applying, status, tone, banner, rows, Footer(input.Hotkeys), input.StartWithWindows, input.Power);
     }
 
     /// <summary>Balloon title and text shown after a switch.</summary>
@@ -107,11 +109,14 @@ public static class FlyoutStateBuilder
         return (title, string.Join(Dot, parts));
     }
 
-    /// <summary>Tray tooltip: <c>PowerMode · Station · GPU 9 W</c>; while a switch runs <c>PowerMode · Applying Station… · GPU 9 W</c>.</summary>
-    public static string Tooltip(PowerModeKind mode, bool applying, double? gpuWatts)
+    /// <summary>
+    /// Tray tooltip: <c>PowerMode · Station · ≈ 142 W</c> (the estimated total); while a switch runs
+    /// <c>PowerMode · Applying Station… · ≈ 142 W</c>.
+    /// </summary>
+    public static string Tooltip(PowerModeKind mode, bool applying, double? totalWatts)
     {
         var text = $"PowerMode{Dot}{(applying ? $"Applying {ModeNames.Display(mode)}{Ellipsis}" : ModeNames.Display(mode))}";
-        return gpuWatts is { } watts ? text + string.Create(CultureInfo.InvariantCulture, $"{Dot}GPU {watts:0} W") : text;
+        return totalWatts is { } watts ? text + string.Create(CultureInfo.InvariantCulture, $"{Dot}{PowerCards.Approx} {watts:0} W") : text;
     }
 
     public static string Footer(HotkeyConfig hotkeys)

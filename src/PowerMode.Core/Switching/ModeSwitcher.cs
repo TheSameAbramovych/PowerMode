@@ -163,6 +163,14 @@ public sealed class ModeSwitcher : IDisposable
     public Task SetTrayPromotedForAsync(string exePath, CancellationToken cancellationToken = default) =>
         SaveAsync(state => state.TrayPromotedFor = exePath, cancellationToken);
 
+    /// <summary>Calibrate the power estimate against the station's display, or reset it (null).</summary>
+    public Task SetPowerCalibrationAsync(Power.PowerCalibration? calibration, CancellationToken cancellationToken = default) =>
+        SaveAsync(state => state.PowerCalibration = calibration, cancellationToken);
+
+    /// <summary>The estimate in Grid right before leaving it, for "vs Grid" in the saving mode.</summary>
+    public Task SetGridReferenceAsync(double? watts, CancellationToken cancellationToken = default) =>
+        SaveAsync(state => state.GridReferenceW = watts, cancellationToken);
+
     private async Task SaveAsync(Action<PersistedState> change, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);

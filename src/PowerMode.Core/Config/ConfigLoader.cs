@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using PowerMode.Core.Input;
@@ -174,6 +175,16 @@ public static class ConfigLoader
 
         RequireRange(errors, "docker.engineWaitSeconds", config.Docker.EngineWaitSeconds, 1, 900);
         RequireRange(errors, "flyout.margin", config.Flyout.Margin, 0, 200);
+        var power = config.Power;
+        RequireRange(errors, "power.cpuIdleW", power.CpuIdleW, 0, 500);
+        RequireRange(errors, "power.cpuSpanW", power.CpuSpanW, 0, 1000);
+        RequireRange(errors, "power.cpuBaseGhz", power.CpuBaseGhz, 0.5, 10);
+        RequireRange(errors, "power.cpuExponent", power.CpuExponent, 0, 5);
+        RequireRange(errors, "power.monitorBaseW", power.MonitorBaseW, 0, 200);
+        RequireRange(errors, "power.monitorPerPercentW", power.MonitorPerPercentW, 0, 5);
+        RequireRange(errors, "power.highRefreshExtraW", power.HighRefreshExtraW, 0, 100);
+        RequireRange(errors, "power.otherW", power.OtherW, 0, 1000);
+        RequireRange(errors, "power.psuEfficiency", power.PsuEfficiency, 0.5, 1);
         foreach (var mode in ModeNames.All)
         {
             var text = config.Hotkeys.For(mode);
@@ -184,6 +195,14 @@ public static class ConfigLoader
         }
 
         return errors;
+    }
+
+    private static void RequireRange(List<string> errors, string name, double value, double min, double max)
+    {
+        if (double.IsNaN(value) || value < min || value > max)
+        {
+            errors.Add(string.Create(CultureInfo.InvariantCulture, $"{name} must be between {min} and {max} (was {value})."));
+        }
     }
 
     private static void RequireRange(List<string> errors, string name, int? value, int min, int max)

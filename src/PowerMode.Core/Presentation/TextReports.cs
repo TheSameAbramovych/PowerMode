@@ -18,6 +18,12 @@ public static class TextReports
         ArgumentNullException.ThrowIfNull(state);
         var text = new StringBuilder();
         text.AppendLine("PowerMode" + FlyoutStateBuilder.Dot + state.StatusLine);
+        if (state.Power is { } power)
+        {
+            text.AppendLine(power.SummaryLine);
+            text.AppendLine(power.PartsLine);
+        }
+
         if (state.Banner is { } banner)
         {
             text.AppendLine(banner);

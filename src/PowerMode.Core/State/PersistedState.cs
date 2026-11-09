@@ -1,5 +1,6 @@
 using PowerMode.Core.Levers;
 using PowerMode.Core.Model;
+using PowerMode.Core.Power;
 
 namespace PowerMode.Core.State;
 
@@ -43,6 +44,12 @@ public sealed class PersistedState
     /// Done once per path, so an icon the user later hides stays hidden.
     /// </summary>
     public string? TrayPromotedFor { get; set; }
+
+    /// <summary>The offset that aligns the power estimate with the station's display; null = not calibrated.</summary>
+    public PowerCalibration? PowerCalibration { get; set; }
+
+    /// <summary>Mean estimated watts over the last minute in Grid before the last switch to a saving mode.</summary>
+    public double? GridReferenceW { get; set; }
 
     /// <summary>The options of a mode (defaults when never set). Read-only: change them with <see cref="WithOptions"/>.</summary>
     public ModeOptions OptionsFor(PowerModeKind mode) => Options.TryGetValue(mode, out var options) ? options : new ModeOptions();
