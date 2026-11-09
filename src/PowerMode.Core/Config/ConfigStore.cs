@@ -54,6 +54,12 @@ public sealed class ConfigStore : IDisposable
             _log.Error(Category, $"Cannot read {_path}, keeping last good config", ex);
             return false;
         }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Bad content must never take the app down: keep the last good config.
+            _log.Error(Category, $"Cannot load {_path}, keeping last good config", ex);
+            return false;
+        }
     }
 
     /// <summary>Apply config text; invalid text keeps the last good config and logs why.</summary>
@@ -86,12 +92,20 @@ public sealed class ConfigStore : IDisposable
 
     private void OnFileEvent(object sender, FileSystemEventArgs e) => _debounceTimer?.Change(Debounce, Timeout.InfiniteTimeSpan);
 
-    private void Reload()
+    /// <summary>Runs on the debounce timer's thread, where an escaping exception would end the process.</summary>
+    internal void Reload()
     {
-        if (Load())
+        try
         {
-            _log.Write(Category, "Reloaded config");
-            Changed?.Invoke(this, EventArgs.Empty);
+            if (Load())
+            {
+                _log.Write(Category, "Reloaded config");
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Error(Category, "Config reload failed", ex);
         }
     }
 

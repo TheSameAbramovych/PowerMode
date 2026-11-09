@@ -30,7 +30,15 @@ How it works:
   limit, Wallpaper Engine running, running containers, running apps from the close lists with path and
   arguments, state of the listed services) in `state.json` before anything changes. Station ↔ Reserve does not
   take a new snapshot. Grid restores it lever by lever and then deletes it; if a restore fails (for example the
-  GPU limit without admin rights) the snapshot is kept so Grid can be retried.
+  GPU limit without admin rights) the failed parts are kept so Grid can be retried, and a retry touches only
+  those. A failure that cannot go away (Docker uninstalled, your scheme deleted) is not retried.
+- **A baseline is never guessed.** If a lever cannot be read when the snapshot is taken (a DDC/CI read fails,
+  Docker does not answer), it is read again right before the mode applies; if it still cannot be read, that lever
+  is left as it is ("Baseline not captured, not reducing"), so Grid has nothing to undo. The power scheme is the
+  exception: the mode's scheme is still activated, and Grid then activates `fallbackScheme`. A PowerMode scheme
+  is never recorded as the baseline.
+- **Lists edited in a saving mode.** An app or service added to a close or service list while in Station or
+  Reserve is recorded on the next apply, so Grid brings it back too.
 - **Target state.** Every apply computes the difference between the machine and the mode's target and only
   changes what differs, levers in parallel. Re-applying a mode is harmless.
 - **Re-apply.** On start (a reboot loses the GPU limit), on resume from sleep/hibernate, and when Windows
@@ -100,13 +108,14 @@ is the only honest total. PowerMode shows only what it can measure:
 | Path | Content |
 |---|---|
 | `%LOCALAPPDATA%\PowerMode\config.json` | settings; created with the defaults on first run, reloaded when saved; an invalid file is ignored (the last good config stays, the log says why) |
-| `%LOCALAPPDATA%\PowerMode\state.json` | current mode, since when, snapshot, per-mode options (Keep Docker), last lever results, apps closed by PowerMode, processes in efficiency mode |
+| `%LOCALAPPDATA%\PowerMode\state.json` | current mode, since when, snapshot, per-mode options (Keep Docker), last lever results, apps closed by PowerMode, processes in efficiency mode. Written through a flushed temp file; the previous copy is kept as `state.json.bak`. A file that cannot be read is renamed to `state.json.corrupt-<time>` (never deleted) and the backup is used. If both are unusable while a PowerMode scheme is active, PowerMode takes that mode back and Grid later activates `fallbackScheme` |
 | `%LOCALAPPDATA%\PowerMode\logs\powermode-YYYYMMDD.log` | every lever action with result and duration; 14 days kept |
 
 ## Config reference
 
 Every key is optional: what you leave out keeps its default. Objects merge key by key; lists replace the default
-list. `null` for a number means "leave this lever alone in this mode". Comments and trailing commas are allowed.
+list. `null` for a number means "leave this lever alone in this mode"; `null` for an object, list, text or list
+entry makes the file invalid (the last good config stays). Comments and trailing commas are allowed.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -135,6 +144,7 @@ list. `null` for a number means "leave this lever alone in this mode". Comments 
 | `docker.engineWaitSeconds` | `120` | How long Grid waits for the Docker engine |
 | `wallpaperEngine.path` | Steam's `wallpaper64.exe` | Used for `-control pause\|play` (falls back to the running process) |
 | `reapplyOnDisplayChange` | `true` | Correct brightness/refresh when Windows changes display settings (at most once a minute) |
+| `fallbackScheme` | Balanced `381b4222-…` | Scheme Grid activates when the one active before is unknown (its read failed, or the state was lost). Set it to your own scheme, e.g. AMD Ryzen Balanced `9897998c-92de-4669-853f-b7cd3ecb2790`; must not be a PowerMode scheme |
 
 Example — dimmer Station, keep Postman open in Reserve:
 

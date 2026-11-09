@@ -109,6 +109,71 @@ public sealed class ConfigTests
         Assert.NotEmpty(result.Errors);
     }
 
+    [Theory]
+    [InlineData("""{ "modes": { "station": null } }""")]
+    [InlineData("""{ "modes": null }""")]
+    [InlineData("""{ "hotkeys": null }""")]
+    [InlineData("""{ "hotkeys": { "grid": null } }""")]
+    [InlineData("""{ "docker": null }""")]
+    [InlineData("""{ "docker": { "excludedContainers": null } }""")]
+    [InlineData("""{ "docker": { "excludedContainers": [" "] } }""")]
+    [InlineData("""{ "flyout": null }""")]
+    [InlineData("""{ "wallpaperEngine": null }""")]
+    [InlineData("""{ "wallpaperEngine": { "path": null } }""")]
+    [InlineData("""{ "modes": { "station": { "scheme": null } } }""")]
+    [InlineData("""{ "modes": { "station": { "closeApps": null } } }""")]
+    [InlineData("""{ "modes": { "station": { "closeApps": [null] } } }""")]
+    [InlineData("""{ "modes": { "reserve": { "efficiencyApps": [""] } } }""")]
+    [InlineData("""{ "modes": { "reserve": { "stopServices": ["WSearch", null] } } }""")]
+    [InlineData("""{ "relaunchArguments": null }""")]
+    [InlineData("""{ "relaunchArguments": { "x": null } }""")]
+    [InlineData("""{ "relaunchArguments": { " ": "-silent" } }""")]
+    [InlineData("""{ "fallbackScheme": "7d0a5e02-0000-4000-8000-00504d525356" }""")]
+    [InlineData("""{ "fallbackScheme": "00000000-0000-0000-0000-000000000000" }""")]
+    public void Null_objects_lists_and_entries_are_rejected_not_thrown(string json)
+    {
+        var result = ConfigLoader.Parse(json);
+
+        Assert.False(result.IsValid);
+        Assert.NotEmpty(result.Errors);
+
+        using var dir = new TempDir();
+        var path = dir.File("config.json");
+        File.WriteAllText(path, """{ "modes": { "station": { "brightnessPercent": 42 } } }""");
+        using var store = new ConfigStore(path, new ListLog());
+        Assert.True(store.Load());
+        var good = store.Current;
+
+        Assert.False(store.Apply(json));
+        File.WriteAllText(path, json);
+        Assert.False(store.Load());
+        Assert.Same(good, store.Current);
+    }
+
+    [Fact]
+    public void A_fallback_scheme_of_the_users_own_is_valid()
+    {
+        var result = ConfigLoader.Parse("""{ "fallbackScheme": "9897998c-92de-4669-853f-b7cd3ecb2790" }""");
+
+        Assert.True(result.IsValid);
+        Assert.Equal(Guid.Parse("9897998c-92de-4669-853f-b7cd3ecb2790"), result.Config!.FallbackScheme);
+    }
+
+    [Fact]
+    public void A_reload_never_lets_an_exception_escape_the_timer_thread()
+    {
+        using var dir = new TempDir();
+        var log = new ListLog();
+        var path = dir.File("config.json");
+        File.WriteAllText(path, "{}");
+        using var store = new ConfigStore(path, log);
+        store.Changed += (_, _) => throw new InvalidOperationException("subscriber failed");
+
+        store.Reload();
+
+        Assert.Contains(log.Lines, l => l.Contains("Config reload failed", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Empty_hotkey_disables_it_without_making_the_config_invalid()
     {

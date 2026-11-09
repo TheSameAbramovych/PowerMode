@@ -48,7 +48,7 @@ public static class ConfigLoader
         AppConfig? config;
         try
         {
-            config = merged.Deserialize<AppConfig>(JsonDefaults.Options);
+            config = merged.Deserialize<AppConfig>(ConfigOptions);
         }
         catch (JsonException ex)
         {
@@ -60,8 +60,61 @@ public static class ConfigLoader
             return new ConfigParseResult(null, ["The config is empty."]);
         }
 
-        var errors = Validate(config);
-        return errors.Count == 0 ? new ConfigParseResult(config, []) : new ConfigParseResult(null, errors);
+        try
+        {
+            var errors = Validate(config);
+            return errors.Count == 0 ? new ConfigParseResult(config, []) : new ConfigParseResult(null, errors);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Last resort: a config that breaks validation is invalid, never a crash of the caller (a timer thread on reload).
+            return new ConfigParseResult(null, [$"Invalid config: {ex.Message}"]);
+        }
+    }
+
+    /// <summary>
+    /// The JSON dialect plus nullability: an explicit <c>null</c> for an object, list or text value (e.g.
+    /// <c>"modes": {"station": null}</c>) makes the file invalid instead of replacing the default. Numbers that are
+    /// nullable in the schema (brightness, refresh rate, GPU limit) still take <c>null</c> to mean "leave alone".
+    /// state.json keeps its own lenient dialect.
+    /// </summary>
+    private static readonly JsonSerializerOptions ConfigOptions = CreateConfigOptions();
+
+    private static JsonSerializerOptions CreateConfigOptions()
+    {
+        var options = new JsonSerializerOptions(JsonDefaults.Options) { RespectNullableAnnotations = true };
+        options.MakeReadOnly(populateMissingResolver: true);
+        return options;
+    }
+
+    /// <summary>What nullability annotations do not cover: null or blank list entries and null relaunch arguments.</summary>
+    private static void ValidateEntries(List<string> errors, AppConfig config)
+    {
+        foreach (var mode in new[] { PowerModeKind.Station, PowerModeKind.Reserve })
+        {
+            var m = config.Modes.For(mode)!;
+            var prefix = $"modes.{ModeNames.Key(mode)}";
+            RequireNames(errors, $"{prefix}.closeApps", m.CloseApps);
+            RequireNames(errors, $"{prefix}.efficiencyApps", m.EfficiencyApps);
+            RequireNames(errors, $"{prefix}.stopServices", m.StopServices);
+        }
+
+        RequireNames(errors, "docker.excludedContainers", config.Docker.ExcludedContainers);
+        foreach (var (name, arguments) in config.RelaunchArguments)
+        {
+            if (string.IsNullOrWhiteSpace(name) || arguments is null)
+            {
+                errors.Add($"relaunchArguments.{name}: needs a process name and an arguments string (use \"\" for none).");
+            }
+        }
+    }
+
+    private static void RequireNames(List<string> errors, string name, List<string> values)
+    {
+        if (values.Exists(string.IsNullOrWhiteSpace))
+        {
+            errors.Add($"{name} must not contain null or empty names.");
+        }
     }
 
     internal static void Merge(JsonObject target, JsonObject source)
@@ -84,6 +137,7 @@ public static class ConfigLoader
     {
         ArgumentNullException.ThrowIfNull(config);
         var errors = new List<string>();
+        ValidateEntries(errors, config);
         foreach (var mode in new[] { PowerModeKind.Station, PowerModeKind.Reserve })
         {
             var m = config.Modes.For(mode)!;
