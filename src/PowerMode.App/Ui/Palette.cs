@@ -24,6 +24,11 @@ internal static class Palette
     public const string Accent = "PmAccent";
     public const string OnAccent = "PmOnAccent";
     public const string SwitchOff = "PmSwitchOff";
+    public const string Surface = "PmSurface";
+    public const string SeriesCpu = "PmSeriesCpu";
+    public const string SeriesGpu = "PmSeriesGpu";
+    public const string SeriesMonitor = "PmSeriesMonitor";
+    public const string SeriesOther = "PmSeriesOther";
 
     /// <summary>Tray icon colours, fixed by the spec (they sit on the taskbar, not the flyout).</summary>
     public static readonly Color TrayStation = Color.FromRgb(0xF2, 0xB8, 0x3C);
@@ -64,6 +69,13 @@ internal static class Palette
         Set(resources, Accent, light ? "#005FB8" : "#60CDFF");
         Set(resources, OnAccent, light ? "#FFFFFF" : "#003A57");
         Set(resources, SwitchOff, light ? "#8A8A8A" : "#9E9E9E");
+        Set(resources, Surface, light ? "#FFFFFF" : "#333333");
+
+        // Power breakdown: a validated categorical palette (not the mode colours, which mean Station/Reserve).
+        Set(resources, SeriesCpu, light ? "#2A78D6" : "#3987E5");
+        Set(resources, SeriesGpu, light ? "#D95926" : "#EB6834");
+        Set(resources, SeriesMonitor, light ? "#199E70" : "#1BAF7A");
+        Set(resources, SeriesOther, light ? "#995C5C5C" : "#99C2C2C2");
         foreach (var mode in ModeNames.All)
         {
             Set(resources, ModeKey(mode), ModeHex(mode, light));

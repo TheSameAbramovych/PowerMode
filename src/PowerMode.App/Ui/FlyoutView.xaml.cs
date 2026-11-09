@@ -20,6 +20,14 @@ internal sealed partial class FlyoutView : UserControl
 
     public event EventHandler? PinRequested;
 
+    public event EventHandler? CalibrateRequested;
+
+    public event EventHandler? CalibrationSaveRequested;
+
+    public event EventHandler? CalibrationCancelRequested;
+
+    public event EventHandler? CalibrationResetRequested;
+
     public event EventHandler? SettingsRequested;
 
     public event EventHandler? BackRequested;
@@ -45,6 +53,36 @@ internal sealed partial class FlyoutView : UserControl
     private void OnConfig(object sender, RoutedEventArgs e) => ConfigRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnPin(object sender, RoutedEventArgs e) => PinRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnCalibrate(object sender, RoutedEventArgs e) => CalibrateRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnCalibrationSave(object sender, RoutedEventArgs e) => CalibrationSaveRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnCalibrationCancel(object sender, RoutedEventArgs e) => CalibrationCancelRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnCalibrationReset(object sender, RoutedEventArgs e) => CalibrationResetRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Enter saves the reading, Esc cancels it (and does not close the flyout).</summary>
+    private void OnReadingKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            CalibrationSaveRequested?.Invoke(this, EventArgs.Empty);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CalibrationCancelRequested?.Invoke(this, EventArgs.Empty);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>Put the caret into the reading box (the calibration form just opened).</summary>
+    public void FocusReading()
+    {
+        ReadingBox.Focus();
+        ReadingBox.SelectAll();
+    }
 
     private void OnSettings(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
 

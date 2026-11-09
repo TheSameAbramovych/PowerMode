@@ -10,6 +10,11 @@ public sealed record PowerPart(string Name, double? Watts, bool Measured)
         ? string.Create(CultureInfo.InvariantCulture, $"{Name} {(Measured ? string.Empty : PowerCards.Approx + " ")}{w:0} W")
         : $"{Name} {PowerCards.Unknown}";
 
+    /// <summary>The value alone, for the legend under the bar: <c>≈ 24 W</c>, <c>21 W</c>, <c>–</c>.</summary>
+    public string ValueText => Watts is { } w
+        ? string.Create(CultureInfo.InvariantCulture, $"{(Measured ? string.Empty : PowerCards.Approx + " ")}{w:0} W")
+        : PowerCards.Unknown;
+
     /// <summary>Share of the bar: never negative.</summary>
     public double BarWatts => Math.Max(Watts ?? 0, 0);
 }

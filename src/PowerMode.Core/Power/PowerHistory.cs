@@ -18,14 +18,17 @@ public sealed class PowerHistory
     public static readonly TimeSpan MinDeltaSpan = TimeSpan.FromSeconds(30);
 
     private readonly Queue<PowerPoint> _points = new();
+    private PowerPoint[]? _snapshot;
 
-    public IReadOnlyList<PowerPoint> Points => [.. _points];
+    /// <summary>The points, oldest first; the same list until the next <see cref="Add"/> (so a view redraws only on change).</summary>
+    public IReadOnlyList<PowerPoint> Points => _snapshot ??= [.. _points];
 
     /// <summary>When the last mode switch started in this run (null before the first one).</summary>
     public DateTimeOffset? SwitchedAt { get; private set; }
 
     public void Add(DateTimeOffset at, double totalW)
     {
+        _snapshot = null;
         _points.Enqueue(new PowerPoint(at, totalW));
         while (_points.Count > Capacity || (_points.Count > 0 && at - _points.Peek().At > Window))
         {

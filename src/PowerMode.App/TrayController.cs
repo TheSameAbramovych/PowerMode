@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
@@ -10,6 +11,7 @@ using PowerMode.Core.Cli;
 using PowerMode.Core.Levers;
 using PowerMode.Core.Logging;
 using PowerMode.Core.Planning;
+using PowerMode.Core.Power;
 using PowerMode.Core.Presentation;
 using PowerMode.Core.Switching;
 
@@ -19,8 +21,8 @@ namespace PowerMode.App;
 internal sealed class TrayController : IDisposable
 {
     internal const string Category = "tray";
-    private static readonly TimeSpan FlyoutRefresh = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan TooltipRefresh = TimeSpan.FromSeconds(5);
+    /// <summary>The one live sampler: CPU, GPU and the power estimate every 2 s (DDC/CI and Docker only while the flyout is open).</summary>
+    private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SpinnerStep = TimeSpan.FromMilliseconds(120);
     private static readonly TimeSpan DisplayDebounce = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan ResumeDelay = TimeSpan.FromSeconds(5);
@@ -49,6 +51,7 @@ internal sealed class TrayController : IDisposable
     private bool _autostart;
     private int _spinnerFrame;
     private LiveValues _live = LiveValues.Empty;
+    private readonly PowerTracker _power = new();
 
     public TrayController(App app, AppServices services, SingleInstance instance, IReadOnlyList<string> arguments)
     {
@@ -62,7 +65,7 @@ internal sealed class TrayController : IDisposable
         var view = new FlyoutView { DataContext = _model };
         _flyout = new FlyoutWindow(view, () => _services.Config.Current.Flyout);
         _model.IsPinned = _flyout.IsPinned = services.Switcher.State.FlyoutPinned;
-        _liveTimer = new DispatcherTimer(TooltipRefresh, DispatcherPriority.Background, async (_, _) => await RefreshLiveAsync(), _app.Dispatcher);
+        _liveTimer = new DispatcherTimer(SampleInterval, DispatcherPriority.Background, async (_, _) => await RefreshLiveAsync(sample: true), _app.Dispatcher);
         _spinnerTimer = new DispatcherTimer(SpinnerStep, DispatcherPriority.Normal, (_, _) => AdvanceSpinner(), _app.Dispatcher) { IsEnabled = false };
         _displayDebounce = new DispatcherTimer(DisplayDebounce, DispatcherPriority.Normal, async (_, _) => await OnDisplaySettledAsync(), _app.Dispatcher) { IsEnabled = false };
     }
@@ -109,6 +112,10 @@ internal sealed class TrayController : IDisposable
         view.ModeRequested += (_, mode) => _ = SwitchAsync(mode);
         view.CloseRequested += (_, _) => _flyout.HideFlyout();
         view.PinRequested += async (_, _) => await TogglePinAsync();
+        view.CalibrateRequested += (_, _) => StartCalibration();
+        view.CalibrationSaveRequested += async (_, _) => await SaveCalibrationAsync();
+        view.CalibrationCancelRequested += (_, _) => _model.Power.IsCalibrating = false;
+        view.CalibrationResetRequested += async (_, _) => await SetCalibrationAsync(null);
         view.ConfigRequested += (_, _) => OpenConfig();
         view.SettingsRequested += async (_, _) => await _settings.OpenAsync();
         view.BackRequested += (_, _) => _settings.Close();
@@ -149,8 +156,52 @@ internal sealed class TrayController : IDisposable
         await _queue.RequestAsync(mode);
         if (!_queue.IsSwitching && !_disposed)
         {
-            await RefreshLiveAsync();
+            await RefreshLiveAsync(sample: false);
         }
+    }
+
+    /// <summary>The card turns into "Station shows [ ] W": the user types what the power station's display shows.</summary>
+    private void StartCalibration()
+    {
+        var power = _model.Power;
+        power.Reading = string.Empty;
+        power.ReadingError = null;
+        power.IsCalibrating = true;
+        _app.Dispatcher.BeginInvoke(_flyout.View.FocusReading, DispatcherPriority.Input);
+    }
+
+    /// <summary>Calibrate: the offset that makes the current estimate equal the reading.</summary>
+    private async Task SaveCalibrationAsync()
+    {
+        var power = _model.Power;
+        if (!PowerEstimator.TryParseReading(power.Reading, out var watts, out var error))
+        {
+            power.ReadingError = error;
+            return;
+        }
+
+        if (_power.Estimate(_services.Config.Current.Power, calibration: null) is not { } estimate)
+        {
+            power.ReadingError = "No sample yet; try again in a moment";
+            return;
+        }
+
+        var calibration = PowerEstimator.Calibrate(watts, estimate, DateTimeOffset.Now);
+        _services.Log.Write(Category, string.Create(CultureInfo.InvariantCulture, $"Power calibrated: station {watts:0} W, estimate {estimate.TotalW:0} W, offset {calibration.OffsetW:0} W"));
+        await SetCalibrationAsync(calibration);
+    }
+
+    private async Task SetCalibrationAsync(PowerCalibration? calibration)
+    {
+        _model.Power.IsCalibrating = false;
+        _model.Power.ReadingError = null;
+        await Task.Run(() => _services.Switcher.SetPowerCalibrationAsync(calibration));
+        if (calibration is null)
+        {
+            _services.Log.Write(Category, "Power calibration reset");
+        }
+
+        Refresh();
     }
 
     /// <summary>Pinned: the flyout stays open when it loses focus. Shown at once, saved in state.json.</summary>
@@ -219,6 +270,13 @@ internal sealed class TrayController : IDisposable
     /// <summary>One switch of the queue. Never throws: a failure is logged and the queue goes on.</summary>
     private async Task RunSwitchAsync(PowerModeKind mode)
     {
+        // Leaving Grid: the last minute in Grid is the reference for "vs Grid" (saved under the switcher's gate).
+        var (leavesGrid, reference) = _power.StartSwitch(_services.Switcher.State.Mode, mode, DateTimeOffset.Now);
+        if (leavesGrid)
+        {
+            _ = Task.Run(() => _services.Switcher.SetGridReferenceAsync(reference));
+        }
+
         // Show the switch at once: capturing the baseline (Docker, DDC/CI, powercfg) takes seconds before the switcher reports Started.
         _progress = new SwitchInProgress(mode, _services.Switcher.Levers.Select(l => l.Kind).ToHashSet());
         _spinnerTimer.Start();
@@ -278,10 +336,12 @@ internal sealed class TrayController : IDisposable
 
     private void Refresh()
     {
-        var state = _services.BuildState(_live, _autostart, _progress);
+        var saved = _services.Switcher.State;
+        var mode = _progress?.Mode ?? saved.Mode;
+        var card = _power.Card(_services.Config.Current.Power, saved.PowerCalibration, mode, saved.GridReferenceW, saved.Since, DateTimeOffset.Now);
+        var state = _services.BuildState(_live, _autostart, _progress, card);
         _model.Update(state);
-        var mode = _progress?.Mode ?? _services.Switcher.State.Mode;
-        var tooltip = FlyoutStateBuilder.Tooltip(mode, _progress is not null, _live.GpuWatts);
+        var tooltip = FlyoutStateBuilder.Tooltip(mode, _progress is not null, card.TotalW);
         _tray.Update(mode, _queue.IsSwitching || _progress is not null, _progress is null ? null : _spinnerFrame, _autostart, tooltip);
     }
 
@@ -291,7 +351,11 @@ internal sealed class TrayController : IDisposable
         Refresh();
     }
 
-    private async Task RefreshLiveAsync()
+    /// <summary>
+    /// Read the live values (CPU and GPU always; monitor and Docker, at most every 10 s, only while the flyout is open
+    /// and no switch runs) and, from the timer, add a power sample to the history.
+    /// </summary>
+    private async Task RefreshLiveAsync(bool sample)
     {
         if (_readingLive)
         {
@@ -301,9 +365,14 @@ internal sealed class TrayController : IDisposable
         _readingLive = true;
         try
         {
-            _live = _flyout.IsVisible
-                ? await Task.Run(() => _services.Live.ReadAsync(includeSlow: !_queue.IsSwitching, CancellationToken.None))
-                : _live with { GpuWatts = await Task.Run(_services.Live.GpuWatts) };
+            var includeSlow = _flyout.IsVisible && !_queue.IsSwitching;
+            _live = await Task.Run(() => _services.Live.ReadAsync(includeSlow, CancellationToken.None));
+            if (sample)
+            {
+                var state = _services.Switcher.State;
+                _power.Add(_live.ToPowerInputs(), DateTimeOffset.Now, _services.Config.Current.Power, state.PowerCalibration);
+            }
+
             Refresh();
         }
         finally
@@ -314,14 +383,14 @@ internal sealed class TrayController : IDisposable
 
     private void OnFlyoutVisibilityChanged()
     {
-        _liveTimer.Interval = _flyout.IsVisible ? FlyoutRefresh : TooltipRefresh;
         if (_flyout.IsVisible)
         {
-            _ = RefreshLiveAsync();
+            _ = RefreshLiveAsync(sample: false);
         }
         else
         {
-            // The next open shows the lever table again.
+            // The next open shows the lever table again, without a half-typed calibration.
+            _model.Power.IsCalibrating = false;
             _settings.Close();
         }
     }

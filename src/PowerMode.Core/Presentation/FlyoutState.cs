@@ -13,6 +13,9 @@ public sealed record LiveValues(
     int? DockerContainersRunning = null)
 {
     public static LiveValues Empty { get; } = new();
+
+    /// <summary>The inputs of the power estimate.</summary>
+    public Power.PowerInputs ToPowerInputs() => new(CpuUtilityPercent, CpuGhz, GpuWatts, BrightnessPercent, RefreshHz);
 }
 
 public enum RowGlyph

@@ -207,6 +207,7 @@ public sealed class PowerCardTests
         Assert.True(card.DeltaIsSaving);
         Assert.Equal(("Estimate", "Calibrate", false), (card.CalibrationNote, card.CalibrationAction, card.IsCalibrated));
         Assert.Equal(["CPU ≈ 24 W", "GPU 21 W", "Monitor ≈ 36 W", "Other ≈ 61 W"], card.Parts.Select(p => p.Text));
+        Assert.Equal(["≈ 24 W", "21 W", "≈ 36 W", "≈ 61 W"], card.Parts.Select(p => p.ValueText));
         Assert.Equal(Now.AddMinutes(-4), card.SwitchMarker);
         Assert.Equal(("142", "203"), (card.MinLabel, card.MaxLabel));
         Assert.Equal("Total ≈ 142 W · ▼ 61 W vs Grid · Estimate", card.SummaryLine);
@@ -232,6 +233,7 @@ public sealed class PowerCardTests
         Assert.Equal("≈ –", empty.TotalText);
         Assert.Null(empty.DeltaText);
         Assert.Equal(["CPU –", "GPU –", "Monitor –", "Other –"], empty.Parts.Select(p => p.Text));
+        Assert.All(empty.Parts, p => Assert.Equal("–", p.ValueText));
         Assert.All(empty.Parts, p => Assert.Equal(0, p.BarWatts));
 
         Assert.Equal(0, new PowerPart("Other", -12, false).BarWatts);

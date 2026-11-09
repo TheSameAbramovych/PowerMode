@@ -5,6 +5,7 @@ using PowerMode.Core.Config;
 using PowerMode.Core.Levers;
 using PowerMode.Core.Logging;
 using PowerMode.Core.Planning;
+using PowerMode.Core.Power;
 using PowerMode.Core.Presentation;
 using PowerMode.Core.State;
 using PowerMode.Core.Switching;
@@ -67,7 +68,7 @@ internal sealed class AppServices : IDisposable
     }
 
     /// <summary>The flyout/status state for the current mode (or the one being applied), results and live values.</summary>
-    public FlyoutState BuildState(LiveValues live, bool startWithWindows, SwitchInProgress? progress = null)
+    public FlyoutState BuildState(LiveValues live, bool startWithWindows, SwitchInProgress? progress = null, PowerCard? power = null)
     {
         var state = Switcher.State;
         var mode = progress?.Mode ?? state.Mode;
@@ -85,7 +86,16 @@ internal sealed class AppServices : IDisposable
             Elevation.IsElevated,
             state.OptionsFor(PowerModeKind.Station).KeepDocker,
             startWithWindows,
-            Config.Current.Hotkeys));
+            Config.Current.Hotkeys,
+            power));
+    }
+
+    /// <summary>The power card from one live reading (<c>--status</c>: no history, no "vs Grid").</summary>
+    public PowerCard PowerCardOf(LiveValues live)
+    {
+        var calibration = Switcher.State.PowerCalibration;
+        var estimate = PowerEstimator.Estimate(Config.Current.Power, live.ToPowerInputs(), calibration);
+        return PowerCards.Build(estimate, calibration, null, [], null, DateTimeOffset.Now);
     }
 
     public void Dispose()

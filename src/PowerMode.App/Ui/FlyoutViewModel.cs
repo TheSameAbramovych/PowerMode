@@ -148,6 +148,8 @@ internal sealed class FlyoutViewModel : ObservableObject
 
     public SettingsViewModel Settings { get; } = new();
 
+    public PowerViewModel Power { get; } = new();
+
     /// <summary>The Apps settings page replaces the lever table.</summary>
     public bool IsSettingsOpen
     {
@@ -209,6 +211,10 @@ internal sealed class FlyoutViewModel : ObservableObject
         Banner = state.Banner;
         Footer = state.Footer;
         StartWithWindows = state.StartWithWindows;
+        if (state.Power is { } power)
+        {
+            Power.Update(power);
+        }
     }
 }
 

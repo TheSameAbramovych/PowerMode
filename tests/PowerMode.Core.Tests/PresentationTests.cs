@@ -286,7 +286,7 @@ public sealed class PresentationTests
             [
                 RenderFixtures.Grid, RenderFixtures.GridRestored, RenderFixtures.Station, RenderFixtures.Reserve, RenderFixtures.StationApplying,
                 RenderFixtures.StationFailed, RenderFixtures.ReserveFailed, RenderFixtures.ReserveLight, RenderFixtures.SettingsApps, RenderFixtures.SettingsAppsLight,
-                RenderFixtures.SettingsAppsSaved,
+                RenderFixtures.SettingsAppsSaved, RenderFixtures.HeroGrid, RenderFixtures.HeroCalibrating,
             ],
             fixtures.Select(f => f.FileName));
 
@@ -297,6 +297,10 @@ public sealed class PresentationTests
         Assert.DoesNotContain(page.Rows, r => r.Name == "explorer");
         Assert.Equal(AppChoice.Keep, AppSettings.ChoiceOf(Config.Modes.Station, "Telegram"));
         Assert.Equal("Saved 15:05", fixtures.Single(f => f.FileName == RenderFixtures.SettingsAppsSaved).Feedback!.Saved);
+        Assert.All(fixtures, f => Assert.NotNull(f.State.Power));
+        Assert.Null(fixtures.Single(f => f.FileName == RenderFixtures.HeroGrid).State.Power!.DeltaText);
+        Assert.StartsWith("▼ ", fixtures.Single(f => f.FileName == RenderFixtures.Station).State.Power!.DeltaText, StringComparison.Ordinal);
+        Assert.Equal("186", fixtures.Single(f => f.FileName == RenderFixtures.HeroCalibrating).CalibrationReading);
 
         var reserveFailed = fixtures.Single(f => f.FileName == RenderFixtures.ReserveFailed).State;
         Assert.Equal("GPU limit and services need administrator rights.", reserveFailed.Banner);

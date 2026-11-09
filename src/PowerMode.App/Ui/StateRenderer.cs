@@ -33,7 +33,7 @@ internal static class StateRenderer
         foreach (var fixture in RenderFixtures.All())
         {
             var path = Path.Combine(directory, fixture.FileName);
-            var (bitmap, height) = RenderFlyout(app, fixture.State, fixture.LightTheme, fixture.Settings, fixture.Feedback);
+            var (bitmap, height) = RenderFlyout(app, fixture.State, fixture.LightTheme, fixture.Settings, fixture.Feedback, fixture.CalibrationReading);
             IconRenderer.SavePng(bitmap, path);
             written.Add(string.Create(CultureInfo.InvariantCulture, $"{path} ({height:0} of {FlyoutWindow.MaxFlyoutHeight:0} px)"));
             if (height > FlyoutWindow.MaxFlyoutHeight)
@@ -97,7 +97,7 @@ internal static class StateRenderer
     }
 
     /// <summary>The framed flyout as the window shows it (the Apps settings page when <paramref name="settings"/> is set), and the height its content needs without the window's maximum.</summary>
-    public static (BitmapSource Bitmap, double ContentHeight) RenderFlyout(App app, FlyoutState state, bool light, AppSettingsPage? settings = null, SettingsFeedback? feedback = null)
+    public static (BitmapSource Bitmap, double ContentHeight) RenderFlyout(App app, FlyoutState state, bool light, AppSettingsPage? settings = null, SettingsFeedback? feedback = null, string? calibrationReading = null)
     {
         ArgumentNullException.ThrowIfNull(app);
         app.ThemeMode = light ? ThemeMode.Light : ThemeMode.Dark;
@@ -110,6 +110,12 @@ internal static class StateRenderer
             model.Settings.Load(settings);
             model.Settings.Show(feedback ?? SettingsFeedback.None);
             model.IsSettingsOpen = true;
+        }
+
+        if (calibrationReading is not null)
+        {
+            model.Power.Reading = calibrationReading;
+            model.Power.IsCalibrating = true;
         }
 
         // The live window gets its rounded corners and 1 px border from DWM; draw the same frame here.

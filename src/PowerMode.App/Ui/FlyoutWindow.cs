@@ -10,13 +10,17 @@ using PowerMode.Core.Config;
 namespace PowerMode.App.Ui;
 
 /// <summary>
-/// Borderless 380 px flyout, height to content (max 600), DWM rounded corners + 1 px border, anchored to a
+/// Borderless 380 px flyout, height to content (at most the work area less 24 px), DWM rounded corners + 1 px border, anchored to a
 /// corner of the work area. Hides on Esc (Esc leaves the Apps settings page first), and on deactivation unless
 /// pinned; 1/2/3 switch modes on the lever table (not on the settings page, where they are typed).
 /// </summary>
 internal sealed class FlyoutWindow : Window
 {
-    public const double MaxFlyoutHeight = 600;
+    /// <summary>Space kept free between the flyout and the work-area edges, in total.</summary>
+    private const double WorkAreaReserve = 24;
+
+    /// <summary>The flyout grows with its content up to the work-area height (less a margin); the lever table never scrolls.</summary>
+    public static double MaxFlyoutHeight => SystemParameters.WorkArea.Height - WorkAreaReserve;
 
     private readonly Func<FlyoutConfig> _config;
     private IntPtr _handle;
@@ -74,6 +78,8 @@ internal sealed class FlyoutWindow : Window
 
     public void ShowFlyout()
     {
+        // The work area may have changed (resolution, taskbar) since the last show.
+        MaxHeight = MaxFlyoutHeight;
         Show();
 
         // Safeguard: lay out and paint the content now, so a shown flyout is never left with only its background.
@@ -136,7 +142,7 @@ internal sealed class FlyoutWindow : Window
 
             e.Handled = true;
         }
-        else if (index >= 0 && settings is null)
+        else if (index >= 0 && settings is null && e.OriginalSource is not System.Windows.Controls.TextBox)
         {
             ModeKey?.Invoke(this, ModeNames.All[index]);
             e.Handled = true;

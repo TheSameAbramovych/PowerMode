@@ -41,20 +41,132 @@
                     </ItemsControl>
                 </Border>
 
-                <!-- 3. Status line -->
-                <TextBlock Text="{Binding StatusLine}" FontSize="13" Margin="0,6,4,0" TextWrapping="Wrap">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{DynamicResource PmMuted}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding StatusIsWarning}" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource PmWarning}" />
-                                    <Setter Property="FontWeight" Value="SemiBold" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                <!-- 3. Power card: status line, estimated total, vs Grid, 10-minute sparkline, breakdown bar and legend. -->
+                <Border Background="{DynamicResource PmSurface}" BorderBrush="{DynamicResource PmDivider}" BorderThickness="1"
+                        CornerRadius="12" Padding="12" Margin="0,8,4,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding StatusLine}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{DynamicResource PmMuted}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding StatusIsWarning}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource PmWarning}" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="{Binding Power.CalibrationNote}" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" />
+                                <TextBlock Text=" ·" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" />
+                                <Button Style="{StaticResource PmLinkButton}" Content="{Binding Power.CalibrationAction}" Click="OnCalibrate" Margin="0,-2,-4,-2" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Margin="0,6,0,0" MinHeight="64">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:AnimatedWatts Value="{Binding Power.TotalW}" FontFamily="{StaticResource PmDisplayFont}" FontSize="40" FontWeight="SemiBold"
+                                                      Typography.NumeralAlignment="Tabular" LineHeight="44" LineStackingStrategy="BlockLineHeight"
+                                                      AutomationProperties.Name="Estimated total watts" />
+                                    <TextBlock Text="W" FontSize="16" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Bottom" Margin="4,0,0,6" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding Power.DeltaText}" FontSize="13" Typography.NumeralAlignment="Tabular"
+                                           Visibility="{Binding Power.DeltaText, Converter={StaticResource NullToCollapsed}}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource PmMuted}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Power.DeltaIsSaving}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource PmOk}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+
+                            <!-- Sparkline with its min and max at the right edge. -->
+                            <Grid Grid.Column="1" VerticalAlignment="Center" Visibility="{Binding Power.IsNotCalibrating, Converter={StaticResource BoolToVisibility}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ui:Sparkline Height="44" Points="{Binding Power.History}" SwitchAt="{Binding Power.SwitchMarker}"
+                                              LineBrush="{DynamicResource PmSeriesCpu}" TickBrush="{DynamicResource PmMuted}"
+                                              AutomationProperties.Name="Estimated watts, last 10 minutes" />
+                                <Grid Grid.Column="1" Margin="4,0,0,0">
+                                    <TextBlock Text="{Binding Power.MaxLabel}" FontSize="10" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Top"
+                                               Typography.NumeralAlignment="Tabular" />
+                                    <TextBlock Text="{Binding Power.MinLabel}" FontSize="10" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Bottom"
+                                               Typography.NumeralAlignment="Tabular" />
+                                </Grid>
+                            </Grid>
+
+                            <!-- Inline calibration: what the power station display shows now. -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Visibility="{Binding Power.IsCalibrating, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <TextBlock Text="Station shows" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                    <TextBox x:Name="ReadingBox" Width="64" FontSize="13" Text="{Binding Power.Reading, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="Watts the power station shows" KeyDown="OnReadingKey" />
+                                    <TextBlock Text="W" FontSize="13" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+                                    <Button Style="{StaticResource PmLinkButton}" Content="Reset" Click="OnCalibrationReset" Margin="0,0,4,0" VerticalAlignment="Center"
+                                            Visibility="{Binding Power.IsCalibrated, Converter={StaticResource BoolToVisibility}}" />
+                                    <Button Style="{StaticResource PmLinkButton}" Content="Cancel" Click="OnCalibrationCancel" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <Button Style="{StaticResource PmAccentButton}" Content="Save" Click="OnCalibrationSave" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding Power.ReadingError}" FontSize="12" Foreground="{DynamicResource PmWarning}" HorizontalAlignment="Right"
+                                           Visibility="{Binding Power.ReadingError, Converter={StaticResource NullToCollapsed}}" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Grid>
+
+                        <ui:SegmentBar Height="8" Margin="0,10,0,0" Parts="{Binding Power.Parts}"
+                                       CpuBrush="{DynamicResource PmSeriesCpu}" GpuBrush="{DynamicResource PmSeriesGpu}"
+                                       MonitorBrush="{DynamicResource PmSeriesMonitor}" OtherBrush="{DynamicResource PmSeriesOther}" />
+                        <ItemsControl ItemsSource="{Binding Power.Parts}" Focusable="False" Margin="0,6,0,0">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Rows="1" Columns="4" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel AutomationProperties.Name="{Binding Text}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{DynamicResource PmSeriesOther}" VerticalAlignment="Center" Margin="0,1,5,0" />
+                                            <TextBlock Text="{Binding Name}" FontSize="12" />
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding ValueText}" FontSize="13" Typography.NumeralAlignment="Tabular" Margin="13,1,0,0" />
+                                    </StackPanel>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Name}" Value="CPU">
+                                            <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource PmSeriesCpu}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Name}" Value="GPU">
+                                            <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource PmSeriesGpu}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Name}" Value="Monitor">
+                                            <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource PmSeriesMonitor}" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
 
                 <!-- 6. Elevation banner -->
                 <Border Background="{DynamicResource PmWarningFill}" CornerRadius="6" Padding="10,4" Margin="0,6,4,0"
