@@ -22,6 +22,8 @@ internal sealed class SettingsController
     /// <summary>Names typed into "Add process…" since the page opened; they stay listed while it is open.</summary>
     private readonly List<string> _added = [];
 
+    private SettingsFeedback _feedback = SettingsFeedback.None;
+
     public SettingsController(AppServices services, FlyoutViewModel model, Action refresh)
     {
         _services = services;
@@ -35,12 +37,17 @@ internal sealed class SettingsController
     {
         _added.Clear();
         _model.Settings.AddText = string.Empty;
-        _model.Settings.Message = null;
+        Show(SettingsFeedback.None);
         await ReloadAsync();
         _model.IsSettingsOpen = true;
     }
 
-    public void Close() => _model.IsSettingsOpen = false;
+    /// <summary>Back to the lever table, which shows the lists as saved.</summary>
+    public void Close()
+    {
+        _model.IsSettingsOpen = false;
+        _refresh();
+    }
 
     /// <summary>Rebuild the rows (page opened, a process added, config.json changed on disk).</summary>
     public async Task ReloadAsync()
@@ -54,11 +61,11 @@ internal sealed class SettingsController
         var settings = _model.Settings;
         if (!AppSettings.TryParseProcessName(settings.AddText, out var name, out var error))
         {
-            settings.Message = error;
+            Show(_feedback.Invalid(error!));
             return;
         }
 
-        settings.Message = null;
+        Show(_feedback.Valid());
         settings.AddText = string.Empty;
         if (!_added.Contains(name, StringComparer.OrdinalIgnoreCase))
         {
@@ -74,11 +81,11 @@ internal sealed class SettingsController
         if (!saved)
         {
             _model.Settings.Rows.FirstOrDefault(r => r.Name == change.Name)?.Show(change.Mode, change.From);
-            _model.Settings.Message = NotSaved;
+            Show(SettingsFeedback.NotSaved(NotSaved));
             return;
         }
 
-        _model.Settings.Message = null;
+        Show(SettingsFeedback.SavedAt(DateTimeOffset.Now));
         _services.Log.Write(Category, $"{change.Name} in {ModeNames.Display(change.Mode)}: {change.From} -> {change.To}");
         await ApplyAsync(current => AppSettings.ImmediateLevers(current, change.Mode, change.From, change.To));
     }
@@ -89,12 +96,18 @@ internal sealed class SettingsController
         if (!saved)
         {
             _model.Settings.ShowWallpaper(change.Mode, !change.Pause);
-            _model.Settings.Message = NotSaved;
+            Show(SettingsFeedback.NotSaved(NotSaved));
             return;
         }
 
-        _model.Settings.Message = null;
+        Show(SettingsFeedback.SavedAt(DateTimeOffset.Now));
         await ApplyAsync(current => AppSettings.WallpaperLevers(current, change.Mode));
+    }
+
+    private void Show(SettingsFeedback feedback)
+    {
+        _feedback = feedback;
+        _model.Settings.Show(feedback);
     }
 
     /// <summary>The lever table shows the new lists at once; the re-apply (if any) follows.</summary>

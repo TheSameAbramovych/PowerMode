@@ -124,6 +124,7 @@ internal sealed class FlyoutViewModel : ObservableObject
     private string _footer = string.Empty;
     private bool _startWithWindows;
     private bool _isSettingsOpen;
+    private bool _isPinned = true;
 
     public FlyoutViewModel()
     {
@@ -161,6 +162,25 @@ internal sealed class FlyoutViewModel : ObservableObject
     }
 
     public bool IsMainOpen => !_isSettingsOpen;
+
+    /// <summary>The flyout stays open when it loses focus.</summary>
+    public bool IsPinned
+    {
+        get => _isPinned;
+        set
+        {
+            if (Set(ref _isPinned, value))
+            {
+                Raise(nameof(PinGlyph));
+                Raise(nameof(PinToolTip));
+            }
+        }
+    }
+
+    public string PinGlyph => _isPinned ? Glyphs.PinnedFill : Glyphs.Pin;
+
+    /// <summary>What a click does.</summary>
+    public string PinToolTip => _isPinned ? "Hide when clicking elsewhere" : "Keep open";
 
     public void ApplyTheme(bool light)
     {
@@ -207,6 +227,8 @@ internal static class Glyphs
     public const string Shield = "";
 
     public const string Back = "";
+    public const string Pin = "";
+    public const string PinnedFill = "";
 
     public static string ForMode(PowerModeKind mode) => mode switch
     {

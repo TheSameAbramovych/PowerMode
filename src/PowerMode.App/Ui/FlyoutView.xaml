@@ -19,7 +19,8 @@
                 <Grid Margin="0,0,0,4">
                     <TextBlock Text="PowerMode" FontFamily="{StaticResource PmDisplayFont}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Settings}" ToolTip="Apps settings" Click="OnSettings" />
+                        <Button Style="{StaticResource PmPinButton}" Content="{Binding PinGlyph}" ToolTip="{Binding PinToolTip}" Click="OnPin" />
+                        <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Settings}" ToolTip="Apps settings" Click="OnSettings" Margin="2,0,0,0" />
                         <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Close}" ToolTip="Close (Esc)" Click="OnClose" Margin="2,0,0,0" />
                     </StackPanel>
                 </Grid>
@@ -177,7 +178,11 @@
                     <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Back}" ToolTip="Back (Esc)" Click="OnBack" Margin="-6,0,2,0" />
                     <TextBlock Text="Apps" FontFamily="{StaticResource PmDisplayFont}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
                 </StackPanel>
-                <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Close}" ToolTip="Close" Click="OnClose" HorizontalAlignment="Right" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock Text="{Binding Settings.Saved}" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" Margin="0,0,8,0"
+                               Visibility="{Binding Settings.Saved, Converter={StaticResource NullToCollapsed}}" />
+                    <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Close}" ToolTip="Close" Click="OnClose" />
+                </StackPanel>
             </Grid>
             <TextBlock Text="What Station and Reserve do with each app. A change for the current mode applies at once."
                        FontSize="12" Foreground="{DynamicResource PmMuted}" TextWrapping="Wrap" Margin="0,0,4,8" />

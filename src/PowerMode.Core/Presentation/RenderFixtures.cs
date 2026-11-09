@@ -7,8 +7,8 @@ using PowerMode.Core.State;
 
 namespace PowerMode.Core.Presentation;
 
-/// <summary>A flyout state to render; with <see cref="Settings"/> the Apps settings page is shown instead of the lever table.</summary>
-public sealed record RenderFixture(string FileName, FlyoutState State, bool LightTheme, AppSettingsPage? Settings = null);
+/// <summary>A flyout state to render; with <see cref="Settings"/> the Apps settings page is shown instead of the lever table, with <see cref="Feedback"/> on it.</summary>
+public sealed record RenderFixture(string FileName, FlyoutState State, bool LightTheme, AppSettingsPage? Settings = null, SettingsFeedback? Feedback = null);
 
 /// <summary>Fake but realistic flyout states for <c>--render-states</c>. Built from the default config; touches nothing.</summary>
 public static class RenderFixtures
@@ -23,6 +23,7 @@ public static class RenderFixtures
     public const string ReserveLight = "reserve-light.png";
     public const string SettingsApps = "settings-apps.png";
     public const string SettingsAppsLight = "settings-apps-light.png";
+    public const string SettingsAppsSaved = "settings-apps-saved.png";
 
     /// <summary>An app with a long name, closed in Reserve, so the settings render shows how such a name wraps.</summary>
     public const string LongName = "Adobe Creative Cloud Experience";
@@ -72,6 +73,7 @@ public static class RenderFixtures
             new(ReserveLight, Build(config, PowerModeKind.Reserve, snapshot, _ => { }, [], reserveLive, isElevated: true), true),
             new(SettingsApps, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false, SettingsPage(config)),
             new(SettingsAppsLight, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), true, SettingsPage(config)),
+            new(SettingsAppsSaved, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false, SettingsPage(config), SettingsFeedback.SavedAt(Now)),
         ];
     }
 

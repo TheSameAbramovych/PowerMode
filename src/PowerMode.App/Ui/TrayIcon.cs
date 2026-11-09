@@ -62,6 +62,13 @@ internal sealed class TrayIcon : IDisposable
 
     public void Show() => _icon.Visible = true;
 
+    /// <summary>Remove and add the icon again, so the taskbar reads its settings (promotion) anew.</summary>
+    public void Readd()
+    {
+        _icon.Visible = false;
+        _icon.Visible = true;
+    }
+
     public void Update(PowerModeKind mode, bool switching, int? spinnerFrame, bool autostart, string tooltip)
     {
         foreach (var (itemMode, item) in _modeItems)

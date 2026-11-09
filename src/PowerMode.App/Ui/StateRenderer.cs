@@ -17,7 +17,11 @@ internal sealed record RenderReport(IReadOnlyList<string> Written, IReadOnlyList
 internal static class StateRenderer
 {
     private const double Scale = 2.0;
-    private const int TrayPngSize = 32;
+
+    /// <summary>Tray icon sizes at 100/125/150/200 % scaling, each shown 4× enlarged pixel by pixel on the taskbar colour.</summary>
+    private static readonly int[] TraySizes = [16, 20, 24, 32];
+    private const int TrayZoom = 4;
+    private const int TrayGap = 8;
     private const double Dpi = 96;
     private const double FrameBorder = 2;
 
@@ -29,7 +33,7 @@ internal static class StateRenderer
         foreach (var fixture in RenderFixtures.All())
         {
             var path = Path.Combine(directory, fixture.FileName);
-            var (bitmap, height) = RenderFlyout(app, fixture.State, fixture.LightTheme, fixture.Settings);
+            var (bitmap, height) = RenderFlyout(app, fixture.State, fixture.LightTheme, fixture.Settings, fixture.Feedback);
             IconRenderer.SavePng(bitmap, path);
             written.Add(string.Create(CultureInfo.InvariantCulture, $"{path} ({height:0} of {FlyoutWindow.MaxFlyoutHeight:0} px)"));
             if (height > FlyoutWindow.MaxFlyoutHeight)
@@ -38,22 +42,62 @@ internal static class StateRenderer
             }
         }
 
-        var lightTaskbar = Palette.TaskbarUsesLightTheme();
-        foreach (var mode in ModeNames.All)
+        // Tray icons on both taskbar themes, at every size the notification area uses.
+        foreach (var light in new[] { false, true })
         {
-            var path = Path.Combine(directory, $"tray-{ModeNames.Key(mode)}.png");
-            IconRenderer.SavePng(IconRenderer.Render(mode, TrayPngSize, lightTaskbar, spinnerFrame: null), path);
-            written.Add(path);
+            var suffix = light ? "-light" : string.Empty;
+            foreach (var mode in ModeNames.All)
+            {
+                var path = Path.Combine(directory, $"tray-{ModeNames.Key(mode)}{suffix}.png");
+                IconRenderer.SavePng(TrayStrip(mode, light, spinnerFrame: null), path);
+                written.Add(path);
+            }
+
+            var applying = Path.Combine(directory, $"tray-station-applying{suffix}.png");
+            IconRenderer.SavePng(TrayStrip(PowerModeKind.Station, light, spinnerFrame: 1), applying);
+            written.Add(applying);
         }
 
-        var applying = Path.Combine(directory, "tray-station-applying.png");
-        IconRenderer.SavePng(IconRenderer.Render(PowerModeKind.Station, TrayPngSize, lightTaskbar, spinnerFrame: 1), applying);
-        written.Add(applying);
         return new RenderReport(written, overflows);
     }
 
+    /// <summary>One tray icon at each of <see cref="TraySizes"/>, side by side on the taskbar colour, enlarged without smoothing.</summary>
+    private static RenderTargetBitmap TrayStrip(PowerModeKind mode, bool lightTaskbar, int? spinnerFrame)
+    {
+        var cell = TraySizes.Max() * TrayZoom;
+        var width = TrayGap + TraySizes.Length * (cell + TrayGap);
+        var height = cell + 2 * TrayGap;
+        var background = new SolidColorBrush(lightTaskbar ? Palette.TaskbarLight : Palette.TaskbarDark);
+        background.Freeze();
+        var group = new DrawingGroup();
+        RenderOptions.SetBitmapScalingMode(group, BitmapScalingMode.NearestNeighbor);
+        using (var context = group.Open())
+        {
+            context.DrawRectangle(background, null, new Rect(0, 0, width, height));
+            for (var i = 0; i < TraySizes.Length; i++)
+            {
+                var size = TraySizes[i];
+                var icon = IconRenderer.Render(mode, size, lightTaskbar, spinnerFrame);
+                var x = TrayGap + i * (cell + TrayGap) + (cell - size * TrayZoom) / 2.0;
+                var y = TrayGap + (cell - size * TrayZoom) / 2.0;
+                context.DrawImage(icon, new Rect(x, y, size * TrayZoom, size * TrayZoom));
+            }
+        }
+
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+        {
+            context.DrawDrawing(group);
+        }
+
+        var bitmap = new RenderTargetBitmap(width, height, Dpi, Dpi, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
     /// <summary>The framed flyout as the window shows it (the Apps settings page when <paramref name="settings"/> is set), and the height its content needs without the window's maximum.</summary>
-    public static (BitmapSource Bitmap, double ContentHeight) RenderFlyout(App app, FlyoutState state, bool light, AppSettingsPage? settings = null)
+    public static (BitmapSource Bitmap, double ContentHeight) RenderFlyout(App app, FlyoutState state, bool light, AppSettingsPage? settings = null, SettingsFeedback? feedback = null)
     {
         ArgumentNullException.ThrowIfNull(app);
         app.ThemeMode = light ? ThemeMode.Light : ThemeMode.Dark;
@@ -64,6 +108,7 @@ internal static class StateRenderer
         if (settings is not null)
         {
             model.Settings.Load(settings);
+            model.Settings.Show(feedback ?? SettingsFeedback.None);
             model.IsSettingsOpen = true;
         }
 

@@ -18,16 +18,23 @@ internal static class IconRenderer
     private const double DotRadiusRatio = 0.17;
     private const double InkInset = 0.04;
 
+    /// <summary>
+    /// The tray icon. Every mode has a colour, so a running PowerMode always looks "on": Grid the plug in blue,
+    /// Station the amber battery, Reserve the red low battery; the two saving modes also carry a small filled dot
+    /// (replaced by the orbiting dot while a switch runs).
+    /// </summary>
     public static BitmapSource Render(PowerModeKind mode, int size, bool lightTaskbar, int? spinnerFrame)
     {
         var color = mode switch
         {
             PowerModeKind.Station => Palette.TrayStation,
             PowerModeKind.Reserve => Palette.TrayReserve,
-            _ => lightTaskbar ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Colors.White,
+            _ => lightTaskbar ? Palette.TrayGridOnLight : Palette.TrayGridOnDark,
         };
         var brush = new SolidColorBrush(color);
         brush.Freeze();
+        var outline = new Pen(new SolidColorBrush(lightTaskbar ? Palette.TaskbarLight : Palette.TaskbarDark), Math.Max(1, size / 16.0));
+        outline.Freeze();
 
         var geometry = GlyphGeometry(Glyphs.ForMode(mode));
         var bounds = geometry.Bounds;
@@ -43,17 +50,20 @@ internal static class IconRenderer
         using (var context = visual.RenderOpen())
         {
             context.DrawGeometry(brush, null, geometry);
+            var radius = Math.Max(1.5, size * DotRadiusRatio);
             if (spinnerFrame is { } frame)
             {
-                var radius = Math.Max(1.5, size * DotRadiusRatio);
                 var angle = 2 * Math.PI * (frame % SpinnerFrames) / SpinnerFrames;
                 var orbit = size * 0.18;
                 var centre = new Point(size - radius - orbit * 0.5 + Math.Cos(angle) * orbit * 0.5, size - radius - orbit * 0.5 + Math.Sin(angle) * orbit * 0.5);
-                var outline = new Pen(lightTaskbar ? Brushes.White : Brushes.Black, Math.Max(1, size / 32.0));
-                outline.Freeze();
-                var accent = new SolidColorBrush(lightTaskbar ? Color.FromRgb(0x00, 0x5F, 0xB8) : Color.FromRgb(0x60, 0xCD, 0xFF));
+                var accent = new SolidColorBrush(lightTaskbar ? Palette.TrayGridOnLight : Palette.TrayGridOnDark);
                 accent.Freeze();
                 context.DrawEllipse(accent, outline, centre, radius, radius);
+            }
+            else if (mode != PowerModeKind.Grid)
+            {
+                // "Active" dot in the mode colour, cut out of the glyph by a ring in the taskbar colour.
+                context.DrawEllipse(brush, outline, new Point(size - radius - outline.Thickness / 2, size - radius - outline.Thickness / 2), radius, radius);
             }
         }
 

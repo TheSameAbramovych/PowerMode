@@ -286,6 +286,7 @@ public sealed class PresentationTests
             [
                 RenderFixtures.Grid, RenderFixtures.GridRestored, RenderFixtures.Station, RenderFixtures.Reserve, RenderFixtures.StationApplying,
                 RenderFixtures.StationFailed, RenderFixtures.ReserveFailed, RenderFixtures.ReserveLight, RenderFixtures.SettingsApps, RenderFixtures.SettingsAppsLight,
+                RenderFixtures.SettingsAppsSaved,
             ],
             fixtures.Select(f => f.FileName));
 
@@ -295,6 +296,7 @@ public sealed class PresentationTests
         Assert.Contains(page.Rows, r => r.Name == "discord" && r.Station == AppChoice.Keep);
         Assert.DoesNotContain(page.Rows, r => r.Name == "explorer");
         Assert.Equal(AppChoice.Keep, AppSettings.ChoiceOf(Config.Modes.Station, "Telegram"));
+        Assert.Equal("Saved 15:05", fixtures.Single(f => f.FileName == RenderFixtures.SettingsAppsSaved).Feedback!.Saved);
 
         var reserveFailed = fixtures.Single(f => f.FileName == RenderFixtures.ReserveFailed).State;
         Assert.Equal("GPU limit and services need administrator rights.", reserveFailed.Banner);

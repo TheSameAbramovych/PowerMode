@@ -46,6 +46,15 @@
         </Setter>
     </Style>
 
+    <!-- The pin toggle in the header (DataContext: FlyoutViewModel): accent filled pin when pinned. -->
+    <Style x:Key="PmPinButton" TargetType="Button" BasedOn="{StaticResource PmIconButton}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsPinned}" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource PmAccent}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- One segment of the mode selector; DataContext is a ModeItem. -->
     <Style x:Key="PmModeButton" TargetType="Button">
         <Setter Property="Height" Value="44" />

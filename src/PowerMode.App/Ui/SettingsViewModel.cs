@@ -72,6 +72,7 @@ internal sealed class SettingsViewModel : ObservableObject
     private bool _pauseReserve;
     private string _addText = string.Empty;
     private string? _message;
+    private string? _saved;
 
     public static IReadOnlyList<ChoiceOption> AppChoices { get; } =
     [
@@ -115,7 +116,17 @@ internal sealed class SettingsViewModel : ObservableObject
     public string AddText { get => _addText; set => Set(ref _addText, value); }
 
     /// <summary>A validation or save problem shown under the add field; null when there is none.</summary>
-    public string? Message { get => _message; set => Set(ref _message, value); }
+    public string? Message { get => _message; private set => Set(ref _message, value); }
+
+    /// <summary>"Saved 10:31" next to the title after the last saved change; null before any.</summary>
+    public string? Saved { get => _saved; private set => Set(ref _saved, value); }
+
+    public void Show(SettingsFeedback feedback)
+    {
+        ArgumentNullException.ThrowIfNull(feedback);
+        Saved = feedback.Saved;
+        Message = feedback.Error;
+    }
 
     /// <summary>Replace the page content (page opened, process added, config.json changed on disk). Reports nothing.</summary>
     public void Load(AppSettingsPage page)

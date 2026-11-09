@@ -214,3 +214,12 @@ internal static class Ntdll
     [DllImport("ntdll.dll")]
     public static extern int NtQueryInformationProcess(Microsoft.Win32.SafeHandles.SafeProcessHandle process, int informationClass, IntPtr information, int length, out int returnLength);
 }
+
+internal static class Shell32
+{
+    public const int SOk = 0;
+
+    /// <summary>The path of a known folder; free <paramref name="path"/> with <see cref="Marshal.FreeCoTaskMem"/>.</summary>
+    [DllImport("shell32.dll")]
+    public static extern int SHGetKnownFolderPath(in Guid folderId, uint flags, IntPtr token, out IntPtr path);
+}

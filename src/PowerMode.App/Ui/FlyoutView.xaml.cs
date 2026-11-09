@@ -18,6 +18,8 @@ internal sealed partial class FlyoutView : UserControl
 
     public event EventHandler? ConfigRequested;
 
+    public event EventHandler? PinRequested;
+
     public event EventHandler? SettingsRequested;
 
     public event EventHandler? BackRequested;
@@ -41,6 +43,8 @@ internal sealed partial class FlyoutView : UserControl
     private void OnClose(object sender, RoutedEventArgs e) => CloseRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnConfig(object sender, RoutedEventArgs e) => ConfigRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnPin(object sender, RoutedEventArgs e) => PinRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnSettings(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
 

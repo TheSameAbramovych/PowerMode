@@ -26,6 +26,7 @@ internal sealed class TrayController : IDisposable
     private static readonly TimeSpan ResumeDelay = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan ReopenGuard = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan StartWatchdog = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan PromotionRetry = TimeSpan.FromSeconds(2);
     private static readonly LeverKind[] DisplayLevers = [LeverKind.DisplayMode, LeverKind.Brightness];
 
     private readonly App _app;
@@ -60,6 +61,7 @@ internal sealed class TrayController : IDisposable
         _settings = new SettingsController(services, _model, Refresh);
         var view = new FlyoutView { DataContext = _model };
         _flyout = new FlyoutWindow(view, () => _services.Config.Current.Flyout);
+        _model.IsPinned = _flyout.IsPinned = services.Switcher.State.FlyoutPinned;
         _liveTimer = new DispatcherTimer(TooltipRefresh, DispatcherPriority.Background, async (_, _) => await RefreshLiveAsync(), _app.Dispatcher);
         _spinnerTimer = new DispatcherTimer(SpinnerStep, DispatcherPriority.Normal, (_, _) => AdvanceSpinner(), _app.Dispatcher) { IsEnabled = false };
         _displayDebounce = new DispatcherTimer(DisplayDebounce, DispatcherPriority.Normal, async (_, _) => await OnDisplaySettledAsync(), _app.Dispatcher) { IsEnabled = false };
@@ -93,6 +95,7 @@ internal sealed class TrayController : IDisposable
 
         _ = RefreshAutostartAsync();
         _ = ReapplyOnStartAsync();
+        _ = PromoteTrayIconAsync();
 
         if (openFlyout)
         {
@@ -105,6 +108,7 @@ internal sealed class TrayController : IDisposable
         var view = _flyout.View;
         view.ModeRequested += (_, mode) => _ = SwitchAsync(mode);
         view.CloseRequested += (_, _) => _flyout.HideFlyout();
+        view.PinRequested += async (_, _) => await TogglePinAsync();
         view.ConfigRequested += (_, _) => OpenConfig();
         view.SettingsRequested += async (_, _) => await _settings.OpenAsync();
         view.BackRequested += (_, _) => _settings.Close();
@@ -146,6 +150,58 @@ internal sealed class TrayController : IDisposable
         if (!_queue.IsSwitching && !_disposed)
         {
             await RefreshLiveAsync();
+        }
+    }
+
+    /// <summary>Pinned: the flyout stays open when it loses focus. Shown at once, saved in state.json.</summary>
+    private async Task TogglePinAsync()
+    {
+        var pinned = !_flyout.IsPinned;
+        _flyout.IsPinned = pinned;
+        _model.IsPinned = pinned;
+        await Task.Run(() => _services.Switcher.SetFlyoutPinnedAsync(pinned));
+    }
+
+    /// <summary>
+    /// Windows 11 puts a new tray icon into the overflow, where a running PowerMode cannot be seen. Promote our own
+    /// icon onto the taskbar once per exe path (see <see cref="TrayPromotion"/>); Windows writes the entry shortly
+    /// after the icon appears, so look again once after <see cref="PromotionRetry"/>.
+    /// </summary>
+    private async Task PromoteTrayIconAsync()
+    {
+        var exe = AppPaths.ExecutablePath;
+        for (var attempt = 1; ; attempt++)
+        {
+            var entries = await Task.Run(NotifyIconSettings.Read);
+            var decision = TrayPromotion.Decide(exe, _services.Switcher.State.TrayPromotedFor, entries, NotifyIconSettings.KnownFolder);
+            switch (decision.Action)
+            {
+                case TrayPromotionAction.Skip:
+                    return;
+                case TrayPromotionAction.NotFound when attempt == 1:
+                    await Task.Delay(PromotionRetry);
+                    continue;
+                case TrayPromotionAction.NotFound:
+                    _services.Log.Write(Category, "Tray icon: no taskbar entry for this exe yet; trying again on the next start");
+                    return;
+                case TrayPromotionAction.Unsupported:
+                    _services.Log.Write(Category, "Tray icon: this Windows has no per-icon settings; showed how to keep it visible");
+                    _tray.Toast("PowerMode", TrayPromotion.Hint);
+                    break;
+                case TrayPromotionAction.AlreadyPromoted:
+                    _services.Log.Write(Category, "Tray icon: already on the taskbar");
+                    break;
+                case TrayPromotionAction.Promote:
+                    await Task.Run(() => NotifyIconSettings.Promote(decision.Keys));
+                    _services.Log.Write(Category, $"Tray icon: promoted onto the taskbar (NotifyIconSettings {string.Join(", ", decision.Keys)})");
+
+                    // The taskbar reads the setting when an icon is added: add ours again, once.
+                    _tray.Readd();
+                    break;
+            }
+
+            await Task.Run(() => _services.Switcher.SetTrayPromotedForAsync(exe));
+            return;
         }
     }
 

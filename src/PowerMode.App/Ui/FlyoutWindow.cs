@@ -11,8 +11,8 @@ namespace PowerMode.App.Ui;
 
 /// <summary>
 /// Borderless 380 px flyout, height to content (max 600), DWM rounded corners + 1 px border, anchored to a
-/// corner of the work area. Hides on deactivation or Esc (Esc leaves the Apps settings page first); 1/2/3 switch
-/// modes on the lever table (not on the settings page, where they are typed).
+/// corner of the work area. Hides on Esc (Esc leaves the Apps settings page first), and on deactivation unless
+/// pinned; 1/2/3 switch modes on the lever table (not on the settings page, where they are typed).
 /// </summary>
 internal sealed class FlyoutWindow : Window
 {
@@ -53,10 +53,19 @@ internal sealed class FlyoutWindow : Window
             ApplyFrame();
         };
         SizeChanged += (_, _) => Reposition();
-        Deactivated += (_, _) => HideFlyout();
+        Deactivated += (_, _) =>
+        {
+            if (!IsPinned)
+            {
+                HideFlyout();
+            }
+        };
     }
 
     public FlyoutView View { get; }
+
+    /// <summary>Pinned: stays open when it loses focus; hides only on ×, Esc or the tray icon.</summary>
+    public bool IsPinned { get; set; }
 
     /// <summary>When the flyout was last hidden; a tray click right after that must not reopen it.</summary>
     public DateTime HiddenAt { get; private set; }

@@ -29,6 +29,14 @@ internal static class Palette
     public static readonly Color TrayStation = Color.FromRgb(0xF2, 0xB8, 0x3C);
     public static readonly Color TrayReserve = Color.FromRgb(0xFF, 0x6B, 0x6B);
 
+    /// <summary>Grid on the taskbar: the accent blue, so a running PowerMode in Grid looks "on" too.</summary>
+    public static readonly Color TrayGridOnDark = Color.FromRgb(0x4C, 0xC2, 0xFF);
+    public static readonly Color TrayGridOnLight = Color.FromRgb(0x00, 0x5F, 0xB8);
+
+    /// <summary>Taskbar backgrounds (dark / light theme): the ring that separates a tray dot from its glyph.</summary>
+    public static readonly Color TaskbarDark = Color.FromRgb(0x20, 0x20, 0x20);
+    public static readonly Color TaskbarLight = Color.FromRgb(0xF3, 0xF3, 0xF3);
+
     private const string PersonalizeKey = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
 
     public static bool AppsUseLightTheme() => ReadFlag("AppsUseLightTheme");
