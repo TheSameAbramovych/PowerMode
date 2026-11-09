@@ -6,7 +6,7 @@ using PowerMode.Core.Model;
 namespace PowerMode.App.Levers;
 
 /// <summary>
-/// Secondary displays off (Windows topology "primary only") and back on (the topology saved when leaving Grid, or
+/// Secondary displays off (only the primary display's paths kept) and back on (the topology saved when leaving Grid, or
 /// the desktop extended to every display when Windows refuses it). Skipped with one display.
 /// </summary>
 internal sealed class SecondaryDisplaysLever : ILever

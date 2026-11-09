@@ -45,9 +45,11 @@ public static class RefreshRates
 
 /// <summary>
 /// The active display configuration as Windows reports it (QueryDisplayConfig): <see cref="Data"/> is the paths and
-/// modes, base64, for SetDisplayConfig; <see cref="ActiveDisplays"/> how many displays were on.
+/// modes, base64, for SetDisplayConfig; <see cref="ActiveDisplays"/> how many displays were on. <see cref="Adapters"/>
+/// maps the adapter LUIDs inside <see cref="Data"/>, which change on every boot, to their device paths, so the layout
+/// can be put back after a reboot; null in a topology saved by an older version.
 /// </summary>
-public sealed record DisplayTopology(int ActiveDisplays, string Data);
+public sealed record DisplayTopology(int ActiveDisplays, string Data, IReadOnlyList<DisplayAdapter>? Adapters = null);
 
 public sealed record GpuSnapshot(uint LimitMilliwatts, uint DefaultMilliwatts);
 

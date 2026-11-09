@@ -26,8 +26,11 @@ internal static class DisplayConfig
     private const int ErrorInsufficientBuffer = 122;
     private const int GetSourceName = 1;
     private const int GetTargetName = 2;
+    private const int GetAdapterName = 4;
     private const int SourceNameSize = 84;
     private const int TargetNameSize = 420;
+    private const int AdapterNameSize = HeaderSize + AdapterPathChars * 2;
+    private const int AdapterPathChars = 128;
     private const int HeaderSize = 20;
     private const int TargetFriendlyNameOffset = HeaderSize + 16;
     private const int TargetFriendlyNameChars = 64;
@@ -35,9 +38,17 @@ internal static class DisplayConfig
 
     /// <summary>Offsets in DISPLAYCONFIG_PATH_INFO: source adapter LUID + id, target adapter LUID + id, target available.</summary>
     private const int SourceIdOffset = 8;
+    private const int SourceModeIndexOffset = 12;
     private const int TargetAdapterOffset = 20;
     private const int TargetIdOffset = 28;
+    private const int OutputTechnologyOffset = 36;
     private const int TargetAvailableOffset = 60;
+
+    /// <summary>DISPLAYCONFIG_MODE_INFO: infoType (1 = source), and the source mode's desktop position.</summary>
+    private const int ModeInfoTypeSource = 1;
+    private const int SourcePositionXOffset = 28;
+    private const int SourcePositionYOffset = 32;
+    private const uint NoModeIndex = 0xFFFFFFFF;
 
     [DllImport("user32.dll")]
     private static extern int GetDisplayConfigBufferSizes(uint flags, out uint pathCount, out uint modeCount);
@@ -104,6 +115,47 @@ internal static class DisplayConfig
         BitConverter.GetBytes(adapter).CopyTo(packet, 8);
         BitConverter.GetBytes(id).CopyTo(packet, 16);
         return DisplayConfigGetDeviceInfo(packet) == ErrorSuccess && Text(packet, TargetFriendlyNameOffset, TargetFriendlyNameChars) is { Length: > 0 } name ? name : null;
+    }
+
+    /// <summary>The path's monitor is a built-in panel (its output technology is internal or embedded).</summary>
+    public static bool TargetIsInternal(byte[] paths, int index) =>
+        Core.Model.TopologyRules.IsInternalOutput(BitConverter.ToUInt32(paths, index * PathSize + OutputTechnologyOffset));
+
+    /// <summary>The path's source mode sits at the desktop origin (0,0): that source is the primary display.</summary>
+    public static bool SourceAtOrigin(byte[] paths, int index, byte[] modes, int modeCount)
+    {
+        var mode = BitConverter.ToUInt32(paths, index * PathSize + SourceModeIndexOffset);
+        if (mode == NoModeIndex || mode >= modeCount)
+        {
+            return false;
+        }
+
+        var offset = (int)mode * ModeSize;
+        return BitConverter.ToInt32(modes, offset) == ModeInfoTypeSource
+            && BitConverter.ToInt32(modes, offset + SourcePositionXOffset) == 0
+            && BitConverter.ToInt32(modes, offset + SourcePositionYOffset) == 0;
+    }
+
+    /// <summary>The paths at the given indices, back to back, for SetDisplayConfig.</summary>
+    public static byte[] SelectPaths(byte[] paths, IReadOnlyList<int> indices)
+    {
+        var selected = new byte[indices.Count * PathSize];
+        for (var i = 0; i < indices.Count; i++)
+        {
+            Array.Copy(paths, indices[i] * PathSize, selected, i * PathSize, PathSize);
+        }
+
+        return selected;
+    }
+
+    /// <summary>An adapter's device path, stable across boots (unlike its LUID); null when Windows does not say.</summary>
+    public static string? AdapterName(long adapter)
+    {
+        var packet = new byte[AdapterNameSize];
+        BitConverter.GetBytes(GetAdapterName).CopyTo(packet, 0);
+        BitConverter.GetBytes(AdapterNameSize).CopyTo(packet, 4);
+        BitConverter.GetBytes(adapter).CopyTo(packet, 8);
+        return DisplayConfigGetDeviceInfo(packet) == ErrorSuccess && Text(packet, HeaderSize, AdapterPathChars) is { Length: > 0 } name ? name : null;
     }
 
     private static byte[] Header(int type, int size, byte[] paths, int adapterOffset, uint id)

@@ -16,7 +16,7 @@ exactly what was there before.
 |---|---|---|---|
 | Power scheme | your scheme before the switch (by GUID) | **PowerMode Station** (copy of Balanced, `7d0a5e01-…`): boost off, max CPU 80 %, min 5 %, display off 5 min, sleep never, hibernate 30 min | **PowerMode Reserve** (copy of Power saver, `7d0a5e02-…`): boost off, max 50 %, min 5 %, display off 2 min, sleep never, hibernate 10 min |
 | Monitor brightness (DDC/CI on every monitor; a laptop panel through WMI) | restored | 35 % | 10 % |
-| Other displays (all but the primary) | turned back on | on | **off** (Windows "primary only"); skipped with one display |
+| Other displays (all but the primary) | turned back on | on | **off** (only the primary display stays on); skipped with one display |
 | Refresh rate (each display; one without the rate gets its lowest rate from 50 Hz) | restored | 60 Hz | 60 Hz |
 | GPU power limit (NVML, **admin**) | restored | 90 W | 60 W (clamped to the card's min/max) |
 | Wallpaper Engine | play again if it was running | pause | pause |
