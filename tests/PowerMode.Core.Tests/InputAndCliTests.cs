@@ -118,4 +118,13 @@ public sealed class CliOptionsTests
         Assert.Equal(CliCommand.Open, CliOptions.FromPipeMessage("garbage").Command);
         Assert.Contains("--render-states", CliOptions.Usage, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("--mode station", "Sent to the running PowerMode: --mode station")]
+    [InlineData("--open", "Sent to the running PowerMode: --open")]
+    public void Forwarded_commands_print_what_was_sent(string args, string text)
+    {
+        Assert.Equal(text, CliOptions.Parse(args.Split(' ')).ForwardedText);
+        Assert.Equal("Sent to the running PowerMode: --open", CliOptions.Parse([]).ForwardedText);
+    }
 }

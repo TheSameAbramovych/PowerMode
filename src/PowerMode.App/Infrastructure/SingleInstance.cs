@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Text;
 using PowerMode.Core.Logging;
 
 namespace PowerMode.App.Infrastructure;
@@ -11,7 +12,8 @@ namespace PowerMode.App.Infrastructure;
 /// </summary>
 internal sealed class SingleInstance : IDisposable
 {
-    public const string Accepted = "ok";
+    /// <summary>The tray's acknowledgement line.</summary>
+    private static readonly byte[] Accepted = "ok\n"u8.ToArray();
     private const string Category = "instance";
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(3);
 
@@ -72,22 +74,32 @@ internal sealed class SingleInstance : IDisposable
         }
     }
 
-    /// <summary>Send one command line to the running instance. Returns false when there is none.</summary>
+    /// <summary>
+    /// Send one command line to the running instance. True once the command has reached it (the write drained into the
+    /// pipe); false when there is no instance or the write did not complete. The tray acknowledges after it has taken
+    /// the command and then closes its end, so the acknowledgement is awaited, but losing it is not a failure.
+    /// </summary>
     public static async Task<bool> TryForwardAsync(string message)
     {
+        var written = false;
         try
         {
             using var client = new NamedPipeClientStream(".", Id, PipeDirection.InOut, PipeOptions.Asynchronous);
             await client.ConnectAsync((int)ConnectTimeout.TotalMilliseconds).ConfigureAwait(false);
-            using var writer = new StreamWriter(client) { AutoFlush = true };
-            using var reader = new StreamReader(client);
-            await writer.WriteLineAsync(message).ConfigureAwait(false);
-            var reply = await reader.ReadLineAsync().WaitAsync(ConnectTimeout).ConfigureAwait(false);
-            return reply == Accepted;
+
+            // Raw bytes, no StreamWriter: disposing a writer flushes into a pipe the tray may already have closed.
+            await client.WriteAsync(Encoding.UTF8.GetBytes(message + "\n")).ConfigureAwait(false);
+            await client.FlushAsync().ConfigureAwait(false);
+            client.WaitForPipeDrain();
+            written = true;
+
+            using var reader = new StreamReader(client, leaveOpen: true);
+            await reader.ReadLineAsync().WaitAsync(ConnectTimeout).ConfigureAwait(false);
+            return true;
         }
-        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or ObjectDisposedException)
         {
-            return false;
+            return written;
         }
     }
 
@@ -102,14 +114,15 @@ internal sealed class SingleInstance : IDisposable
                 {
                     using var server = NamedPipeServerStreamAcl.Create(Id, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, Security());
                     await server.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
-                    using var reader = new StreamReader(server);
-                    using var writer = new StreamWriter(server) { AutoFlush = true };
+                    using var reader = new StreamReader(server, leaveOpen: true);
                     var message = await reader.ReadLineAsync(_stop.Token).ConfigureAwait(false);
-                    await writer.WriteLineAsync(Accepted).ConfigureAwait(false);
                     if (message is not null)
                     {
+                        // Take the command before acknowledging it: a client that is already gone must not lose it.
                         log.Write(Category, $"Forwarded: {message}");
                         onMessage(message);
+                        await server.WriteAsync(Accepted, _stop.Token).ConfigureAwait(false);
+                        await server.FlushAsync(_stop.Token).ConfigureAwait(false);
                     }
                 }
                 catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)

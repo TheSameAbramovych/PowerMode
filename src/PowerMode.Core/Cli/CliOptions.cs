@@ -123,6 +123,9 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
     /// <summary>The single line sent over the named pipe.</summary>
     public string ToPipeMessage() => Command == CliCommand.Mode && Mode is { } m ? $"{ModeFlag} {ModeNames.Key(m)}" : OpenFlag;
 
+    /// <summary>The console line once the command has been handed to the running instance.</summary>
+    public string ForwardedText => $"Sent to the running PowerMode: {ToPipeMessage()}";
+
     public static CliOptions FromPipeMessage(string message)
     {
         ArgumentNullException.ThrowIfNull(message);

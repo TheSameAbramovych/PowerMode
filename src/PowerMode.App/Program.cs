@@ -43,13 +43,17 @@ internal static class Program
             // Let the running instance bring its flyout to the front.
             User32.AllowSetForegroundWindow(User32.AllowAnyProcess);
             var forwarded = SingleInstance.TryForwardAsync(options.ToPipeMessage()).GetAwaiter().GetResult();
-            if (options.Command == CliCommand.Mode)
+
+            // Started from a shortcut there is no parent console and nothing is printed.
+            CliRunner.AttachConsole();
+            if (forwarded)
             {
-                CliRunner.AttachConsole();
-                Console.WriteLine(forwarded ? "Sent to the running PowerMode." : "PowerMode is running but did not answer.");
+                Console.WriteLine(options.ForwardedText);
+                return CliRunner.ExitOk;
             }
 
-            return forwarded ? CliRunner.ExitOk : CliRunner.ExitError;
+            Console.Error.WriteLine("PowerMode is running but did not answer.");
+            return CliRunner.ExitError;
         }
 
         if (options.Command == CliCommand.Mode)
