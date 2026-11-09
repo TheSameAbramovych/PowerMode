@@ -302,7 +302,7 @@ public sealed class PresentationTests
         Assert.All(fixtures, f => Assert.NotNull(f.State.Power));
         Assert.Null(fixtures.Single(f => f.FileName == RenderFixtures.HeroGrid).State.Power!.DeltaText);
         Assert.StartsWith("▼ ", fixtures.Single(f => f.FileName == RenderFixtures.Station).State.Power!.DeltaText, StringComparison.Ordinal);
-        Assert.Equal("186", fixtures.Single(f => f.FileName == RenderFixtures.HeroCalibrating).CalibrationReading);
+        Assert.Equal("121", fixtures.Single(f => f.FileName == RenderFixtures.HeroCalibrating).CalibrationReading);
         Assert.Equal(RenderFixtures.ShortScreenHeight, fixtures.Single(f => f.FileName == RenderFixtures.SettingsLeversShort).MaxHeight);
         Assert.False(fixtures.Single(f => f.FileName == RenderFixtures.SettingsAppsNoWallpaper).Settings!.WallpaperEngineInstalled);
         Assert.True(page.WallpaperEngineInstalled);

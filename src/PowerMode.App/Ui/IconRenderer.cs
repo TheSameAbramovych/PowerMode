@@ -17,6 +17,8 @@ internal static class IconRenderer
     private const double GlyphEm = 100;
     private const double DotRadiusRatio = 0.17;
     private const double InkInset = 0.04;
+    private const int BoldUpToSize = 24;
+    private const double BoldStroke = 0.6;
 
     /// <summary>
     /// The tray icon. Every mode has a colour, so a running PowerMode always looks "on": Grid the plug in blue,
@@ -36,34 +38,48 @@ internal static class IconRenderer
         var outline = new Pen(new SolidColorBrush(lightTaskbar ? Palette.TaskbarLight : Palette.TaskbarDark), Math.Max(1, size / 16.0));
         outline.Freeze();
 
+        // Station and Reserve carry a dot in the top-right corner: their (wide, low) battery glyph sits at the bottom,
+        // so the dot and its 1 px ring in the taskbar colour never touch the battery body.
+        var radius = Math.Max(1.5, size * DotRadiusRatio);
+        var withDot = mode != PowerModeKind.Grid;
         var geometry = GlyphGeometry(Glyphs.ForMode(mode));
         var bounds = geometry.Bounds;
         var inset = size * InkInset;
         var scale = Math.Min((size - 2 * inset) / bounds.Width, (size - 2 * inset) / bounds.Height);
+        var width = bounds.Width * scale;
+        var height = bounds.Height * scale;
+
+        // Whole-pixel placement keeps horizontal and vertical strokes crisp at 16 px.
+        var left = Math.Round((size - width) / 2);
+        var top = withDot ? Math.Round(size - inset - height) : Math.Round((size - height) / 2);
         var transform = new TransformGroup();
-        transform.Children.Add(new TranslateTransform(-bounds.X - bounds.Width / 2, -bounds.Y - bounds.Height / 2));
+        transform.Children.Add(new TranslateTransform(-bounds.X, -bounds.Y));
         transform.Children.Add(new ScaleTransform(scale, scale));
-        transform.Children.Add(new TranslateTransform(size / 2.0, size / 2.0));
+        transform.Children.Add(new TranslateTransform(left, top));
         geometry.Transform = transform;
 
         var visual = new DrawingVisual();
         using (var context = visual.RenderOpen())
         {
-            context.DrawGeometry(brush, null, geometry);
-            var radius = Math.Max(1.5, size * DotRadiusRatio);
+            // Outline glyphs (the plug, the low battery) get a thin stroke on top at small sizes, so their lines are a
+            // full pixel instead of a grey half pixel.
+            var stroke = size <= BoldUpToSize && mode != PowerModeKind.Station ? new Pen(brush, BoldStroke) : null;
+            stroke?.Freeze();
+            context.DrawGeometry(brush, stroke, geometry);
+            var corner = new Point(size - radius - outline.Thickness / 2, radius + outline.Thickness / 2);
             if (spinnerFrame is { } frame)
             {
                 var angle = 2 * Math.PI * (frame % SpinnerFrames) / SpinnerFrames;
-                var orbit = size * 0.18;
-                var centre = new Point(size - radius - orbit * 0.5 + Math.Cos(angle) * orbit * 0.5, size - radius - orbit * 0.5 + Math.Sin(angle) * orbit * 0.5);
+                var orbit = size * 0.09;
+                var centre = new Point(corner.X - orbit + Math.Cos(angle) * orbit, corner.Y + orbit + Math.Sin(angle) * orbit);
                 var accent = new SolidColorBrush(lightTaskbar ? Palette.TrayGridOnLight : Palette.TrayGridOnDark);
                 accent.Freeze();
                 context.DrawEllipse(accent, outline, centre, radius, radius);
             }
-            else if (mode != PowerModeKind.Grid)
+            else if (withDot)
             {
-                // "Active" dot in the mode colour, cut out of the glyph by a ring in the taskbar colour.
-                context.DrawEllipse(brush, outline, new Point(size - radius - outline.Thickness / 2, size - radius - outline.Thickness / 2), radius, radius);
+                // "Active" dot in the mode colour, with a ring in the taskbar colour.
+                context.DrawEllipse(brush, outline, corner, radius, radius);
             }
         }
 

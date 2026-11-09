@@ -62,10 +62,49 @@ internal static class StateRenderer
             written.Add(applying);
         }
 
+        var overview = Path.Combine(directory, "tray-icons.png");
+        IconRenderer.SavePng(TrayOverview(), overview);
+        written.Add(overview);
+
         return new RenderReport(written, overflows);
     }
 
     /// <summary>One tray icon at each of <see cref="TraySizes"/>, side by side on the taskbar colour, enlarged without smoothing.</summary>
+    /// <summary>The three modes at 32 px, twice enlarged, on the dark taskbar (top) and the light one (bottom): the README picture.</summary>
+    private static RenderTargetBitmap TrayOverview()
+    {
+        const int icon = 32;
+        const int zoom = 2;
+        var cell = icon * zoom + 2 * TrayGap;
+        var modes = ModeNames.All;
+        var group = new DrawingGroup();
+        RenderOptions.SetBitmapScalingMode(group, BitmapScalingMode.NearestNeighbor);
+        using (var context = group.Open())
+        {
+            foreach (var (light, row) in new[] { (false, 0), (true, 1) })
+            {
+                var background = new SolidColorBrush(light ? Palette.TaskbarLight : Palette.TaskbarDark);
+                background.Freeze();
+                context.DrawRectangle(background, null, new Rect(0, row * cell, modes.Count * cell, cell));
+                for (var i = 0; i < modes.Count; i++)
+                {
+                    context.DrawImage(IconRenderer.Render(modes[i], icon, light, spinnerFrame: null), new Rect(i * cell + TrayGap, row * cell + TrayGap, icon * zoom, icon * zoom));
+                }
+            }
+        }
+
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+        {
+            context.DrawDrawing(group);
+        }
+
+        var bitmap = new RenderTargetBitmap(modes.Count * cell, 2 * cell, Dpi, Dpi, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
     private static RenderTargetBitmap TrayStrip(PowerModeKind mode, bool lightTaskbar, int? spinnerFrame)
     {
         var cell = TraySizes.Max() * TrayZoom;

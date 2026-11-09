@@ -109,7 +109,7 @@ public static class RenderFixtures
             new(SettingsAppsLight, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), true, SettingsPage(config)),
             new(SettingsAppsSaved, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false, SettingsPage(config), SettingsFeedback.SavedAt(Now)),
             new(HeroGrid, Build(config, PowerModeKind.Grid, null, _ => { }, [], gridLive, isElevated: true, Calibration), false),
-            new(HeroCalibrating, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true, Calibration), false, CalibrationReading: "186"),
+            new(HeroCalibrating, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true, Calibration), false, CalibrationReading: "121"),
             new(SettingsLevers, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false, Feedback: SettingsFeedback.SavedAt(Now), Levers: LeverSettings.Build(config, OwnerPc), Machine: OwnerPc),
             new(SettingsLeversLight, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), true, Levers: LeverSettings.Build(config, OwnerPc), Machine: OwnerPc),
             new(StationTwoMonitors, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive with { Monitors = [new MonitorLive("M27Q2", 35, 59), new MonitorLive("T24i-30", 35, 60)] }, isElevated: true), false),
