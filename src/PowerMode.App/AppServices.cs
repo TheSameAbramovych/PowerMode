@@ -130,6 +130,13 @@ internal sealed class AppServices : IDisposable
             Machine));
     }
 
+    /// <summary>
+    /// One live reading (see <see cref="LiveProbe.ReadAsync"/>); until the brightness has been read, the current
+    /// mode's configured brightness is assumed.
+    /// </summary>
+    public Task<LiveValues> ReadLiveAsync(bool flyoutVisible, bool allowDdc) =>
+        Live.ReadAsync(flyoutVisible, allowDdc, LiveMonitors.Fallback(Config.Current, Switcher.State.Mode), CancellationToken.None);
+
     /// <summary>The power card from one live reading (<c>--status</c>: no history, no "vs Grid").</summary>
     public PowerCard PowerCardOf(LiveValues live)
     {

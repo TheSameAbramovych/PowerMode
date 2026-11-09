@@ -126,8 +126,11 @@ lever table. Layout top→bottom:
    monitor `monitorBaseW + monitorPerPercentW · brightness (+ highRefreshExtraW above 120 Hz)`; total
    `(CPU + GPU + otherW) / psuEfficiency + monitor + calibration offset`; Other = total − CPU − GPU −
    monitor. Calibration offset = station reading − estimate (clamped −100…+250 W), in state.json with its
-   time. Leaving Grid stores the mean of the last 60 s as `gridReferenceW`; a saving mode shows its last
-   60 s mean minus that. History: 300 points (10 min) in memory, with the last switch marked.
+   time. History and reference hold uncalibrated totals (the card adds the current offset to the history), so
+   calibrating in a saving mode never shifts "vs Grid". Leaving Grid stores the mean of the last 60 s as
+   `gridReferenceRawW` (only samples whose monitor brightness was read, not assumed); a saving mode shows its last
+   60 s mean minus that. History: 300 points (10 min) in memory, with the last switch marked; the min/max labels
+   are the plotted range (widened to 40 W).
 4. Lever table — one named row per lever, in this fixed order: `CPU`, `GPU`, `Monitor`, `Display`,
    `Docker`, `Apps`, `Efficiency`, `Services`. Row = 3 columns: lever name (muted, 12 px, 84 px wide) ·
    what this mode set, one fact per line, full names, never "+N" (e.g. `Boost off · max 80 %`,
@@ -195,9 +198,12 @@ a display without the requested rate gets its lowest offered rate from 50 Hz (lo
 the lever. The Monitor row: one line per monitor when there are several (`M27Q2 · 35 % · 60 Hz`,
 `T24i-30 · Off`), the live column likewise; the estimate sums the monitors that are on. Lever **Secondary
 displays** (`secondaryDisplaysOff`: Station false, Reserve true): "off" saves the active paths and modes
-(`QDC_ONLY_ACTIVE_PATHS`) in the snapshot and switches to `SDC_TOPOLOGY_INTERNAL | SDC_APPLY`; Grid (and a mode
-with them on) puts the saved configuration back (`SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG |
-SDC_SAVE_TO_DATABASE | SDC_ALLOW_CHANGES`, falling back to `SDC_TOPOLOGY_EXTEND`), only while fewer displays are
+(`QDC_ONLY_ACTIVE_PATHS`, with each adapter's device path so the LUIDs can be moved to the current boot) in
+the snapshot and applies only the paths whose source is the primary display (clones kept; `SDC_APPLY |
+SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_ALLOW_CHANGES`; `SDC_TOPOLOGY_INTERNAL` only as a fallback when the kept
+display is a built-in panel, never on a desktop); Grid (and a mode with them on) puts the saved configuration back
+(`SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_SAVE_TO_DATABASE | SDC_ALLOW_CHANGES`, falling back to
+`SDC_TOPOLOGY_EXTEND`), only while fewer displays are
 on than saved; skipped with one display. The refresh rate is set after it, brightness after that. The flyout
 anchors to the work area of the monitor that holds the taskbar.
 

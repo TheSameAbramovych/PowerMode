@@ -24,7 +24,7 @@ namespace PowerMode.App;
 internal sealed class TrayController : IDisposable
 {
     internal const string Category = "tray";
-    /// <summary>The one live sampler: CPU, GPU and the power estimate every 2 s (DDC/CI and Docker only while the flyout is open).</summary>
+    /// <summary>The one live sampler: CPU, GPU, displays and the power estimate every 2 s (DDC/CI brightness every 10 s while the flyout is open, else 60 s; Docker only while it is open).</summary>
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SpinnerStep = TimeSpan.FromMilliseconds(120);
     private static readonly TimeSpan DisplayDebounce = TimeSpan.FromSeconds(2);
@@ -52,6 +52,7 @@ internal sealed class TrayController : IDisposable
     private readonly LeversController _levers;
     private SwitchInProgress? _progress;
     private bool _readingLive;
+    private bool _reapplying;
     private bool _disposed;
     private bool _autostart;
     private int _spinnerFrame;
@@ -411,7 +412,7 @@ internal sealed class TrayController : IDisposable
     {
         var saved = _services.Switcher.State;
         var mode = _progress?.Mode ?? saved.Mode;
-        var card = _power.Card(_services.Config.Current.Power, saved.PowerCalibration, mode, saved.GridReferenceW, saved.Since, DateTimeOffset.Now);
+        var card = _power.Card(_services.Config.Current.Power, saved.PowerCalibration, mode, saved.GridReferenceRawW, saved.Since, DateTimeOffset.Now);
         var state = _services.BuildState(_live, _autostart, _progress, card);
         _model.Update(state);
         var tooltip = FlyoutStateBuilder.Tooltip(mode, _progress is not null, card.TotalW);
@@ -430,8 +431,8 @@ internal sealed class TrayController : IDisposable
     }
 
     /// <summary>
-    /// Read the live values (CPU and GPU always; monitor and Docker, at most every 10 s, only while the flyout is open
-    /// and no switch runs) and, from the timer, add a power sample to the history.
+    /// Read the live values (see <see cref="LiveProbe.ReadAsync"/>; no DDC/CI while a switch or a re-apply runs) and,
+    /// from the timer, add a power sample to the history.
     /// </summary>
     private async Task RefreshLiveAsync(bool sample)
     {
@@ -443,12 +444,13 @@ internal sealed class TrayController : IDisposable
         _readingLive = true;
         try
         {
-            var includeSlow = _flyout.IsVisible && !_queue.IsSwitching;
-            _live = await Task.Run(() => _services.Live.ReadAsync(includeSlow, CancellationToken.None));
+            var visible = _flyout.IsVisible;
+            var allowDdc = !_queue.IsSwitching && !_reapplying;
+            _live = await Task.Run(() => _services.ReadLiveAsync(visible, allowDdc));
             if (sample)
             {
                 var state = _services.Switcher.State;
-                _power.Add(_live.ToPowerInputs(), DateTimeOffset.Now, _services.Config.Current.Power, state.PowerCalibration);
+                _power.Add(_live.ToPowerInputs(), DateTimeOffset.Now, _services.Config.Current.Power, state.PowerCalibration, _live.BrightnessKnown);
             }
 
             Refresh();
@@ -653,9 +655,18 @@ internal sealed class TrayController : IDisposable
         if (await Task.Run(() => _services.Switcher.HasDriftedAsync(DisplayLevers)) && _driftGuard.TryEnter())
         {
             _services.Log.Write(Category, "Display levers drifted or failed; re-applying refresh rate and brightness");
-            await Task.Run(() => _services.Switcher.ReapplyAsync(DisplayLevers));
+            _reapplying = true;
+            try
+            {
+                await Task.Run(() => _services.Switcher.ReapplyAsync(DisplayLevers));
+            }
+            finally
+            {
+                _reapplying = false;
+            }
+
             _services.Live.Invalidate();
-            Refresh();
+            await RefreshLiveAsync(sample: false);
         }
     }
 

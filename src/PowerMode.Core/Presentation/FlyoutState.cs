@@ -9,6 +9,7 @@ public sealed record MonitorLive(string Name, int? BrightnessPercent, int? Refre
 /// Values measured right now. Anything not measurable stays null and is not shown. <see cref="BrightnessPercent"/>
 /// and <see cref="RefreshHz"/> are the primary monitor; <see cref="Monitors"/> lists every monitor, primary first,
 /// when more than one is known.
+/// <see cref="BrightnessKnown"/> is false until the monitor brightness has been read once (it is assumed until then).
 /// </summary>
 public sealed record LiveValues(
     double? CpuGhz = null,
@@ -18,7 +19,8 @@ public sealed record LiveValues(
     int? RefreshHz = null,
     bool? DockerEngineRunning = null,
     int? DockerContainersRunning = null,
-    IReadOnlyList<MonitorLive>? Monitors = null)
+    IReadOnlyList<MonitorLive>? Monitors = null,
+    bool BrightnessKnown = true)
 {
     public static LiveValues Empty { get; } = new();
 

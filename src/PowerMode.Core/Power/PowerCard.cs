@@ -30,8 +30,8 @@ public sealed record PowerPart(string Name, double? Watts, bool Measured)
 /// <param name="Parts">CPU, GPU, Monitor, Other, in this order.</param>
 /// <param name="History">The last 10 minutes.</param>
 /// <param name="SwitchMarker">The last mode switch, when inside the history.</param>
-/// <param name="MinLabel">Lowest point of the history, e.g. <c>118</c>.</param>
-/// <param name="MaxLabel">Highest point.</param>
+/// <param name="MinLabel">Bottom of the plotted range (see <see cref="PowerHistory.PlotRange"/>), e.g. <c>118</c>.</param>
+/// <param name="MaxLabel">Top of the plotted range.</param>
 public sealed record PowerCard(
     double? TotalW,
     string TotalText,
@@ -101,8 +101,8 @@ public static class PowerCards
             parts,
             history,
             marker,
-            history.Count > 0 ? Watts(history.Min(p => p.TotalW)) : null,
-            history.Count > 0 ? Watts(history.Max(p => p.TotalW)) : null);
+            history.Count > 0 ? Watts(PowerHistory.PlotRange(history).Min) : null,
+            history.Count > 0 ? Watts(PowerHistory.PlotRange(history).Max) : null);
     }
 
     /// <summary>Time of day today, otherwise with the date.</summary>

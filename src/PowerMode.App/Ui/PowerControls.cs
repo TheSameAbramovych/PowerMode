@@ -86,7 +86,6 @@ internal sealed class Sparkline : FrameworkElement
     private const double LineThickness = 2;
     private const double DotRadius = 3;
     private const byte FillAlpha = 0x1F;
-    private const double MinRangeW = 40;
 
     public static readonly DependencyProperty PointsProperty = DependencyProperty.Register(
         nameof(Points), typeof(IReadOnlyList<PowerPoint>), typeof(Sparkline), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -195,18 +194,12 @@ internal sealed class Sparkline : FrameworkElement
         _tip.Text = string.Create(CultureInfo.InvariantCulture, $"{nearest.At.ToLocalTime():HH:mm:ss} · {PowerCards.Approx} {nearest.TotalW:0} W");
     }
 
-    /// <summary>Time over the last 10 minutes left to right; watts between the lowest and highest point (at least 40 W apart, so a steady load draws flat).</summary>
+    /// <summary>Time over the last 10 minutes left to right; watts over <see cref="PowerHistory.PlotRange"/>, the range the min/max labels name.</summary>
     private (Func<DateTimeOffset, double> X, Func<double, double> Y) Mapping(IReadOnlyList<PowerPoint> points)
     {
         var end = points[^1].At;
         var start = end - PowerHistory.Window;
-        var min = points.Min(p => p.TotalW);
-        var max = points.Max(p => p.TotalW);
-        if (max - min < MinRangeW)
-        {
-            var middle = (max + min) / 2;
-            (min, max) = (middle - MinRangeW / 2, middle + MinRangeW / 2);
-        }
+        var (min, max) = PowerHistory.PlotRange(points);
 
         var inset = DotRadius;
         var width = ActualWidth - inset;

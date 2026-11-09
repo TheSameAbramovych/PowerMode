@@ -208,7 +208,7 @@ public sealed class ModeSwitcher : IDisposable
 
     /// <summary>The estimate in Grid right before leaving it, for "vs Grid" in the saving mode.</summary>
     public Task SetGridReferenceAsync(double? watts, CancellationToken cancellationToken = default) =>
-        SaveAsync(state => state.GridReferenceW = watts, cancellationToken);
+        SaveAsync(state => state.GridReferenceRawW = watts, cancellationToken);
 
     private async Task SaveAsync(Action<PersistedState> change, CancellationToken cancellationToken)
     {

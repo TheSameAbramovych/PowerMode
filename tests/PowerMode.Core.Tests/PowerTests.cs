@@ -80,10 +80,10 @@ public sealed class PowerEstimatorTests
         Assert.Equal(PowerEstimator.MaxOffsetW, PowerEstimator.Calibrate(1900, uncalibrated, at).OffsetW);
         Assert.Equal(PowerEstimator.MinOffsetW, PowerEstimator.Calibrate(20, uncalibrated, at).OffsetW);
 
-        var state = new PersistedState { PowerCalibration = calibration, GridReferenceW = 203.5 };
+        var state = new PersistedState { PowerCalibration = calibration, GridReferenceRawW = 203.5 };
         var copy = StateStore.Deserialize(StateStore.Serialize(state))!;
         Assert.Equal(calibration, copy.PowerCalibration);
-        Assert.Equal(203.5, copy.GridReferenceW);
+        Assert.Equal(203.5, copy.GridReferenceRawW);
         Assert.Null(new PersistedState().PowerCalibration);
     }
 
@@ -302,5 +302,92 @@ public sealed class PowerTrackerTests
         Assert.Equal(Math.Round(PowerEstimator.Estimate(Config, station).TotalW), Math.Round(card.TotalW!.Value));
         Assert.Equal((false, (double?)null), tracker.StartSwitch(PowerModeKind.Station, PowerModeKind.Reserve, T0.AddSeconds(201)));
         Assert.Same(tracker.History.Points, tracker.History.Points);
+    }
+}
+
+public sealed class PowerReferenceAndCalibrationTests
+{
+    private static readonly DateTimeOffset T0 = new(2026, 11, 9, 14, 0, 0, TimeSpan.FromHours(2));
+    private static readonly PowerConfig Config = new();
+    private static readonly PowerInputs Grid = new(10, 3.9, 20, 80, 200);
+    private static readonly PowerInputs Station = new(10, 2.6, 12, 35, 60);
+
+    [Fact]
+    public void Samples_with_an_assumed_brightness_never_become_the_grid_reference()
+    {
+        var tracker = new PowerTracker();
+        var placeholder = new PowerInputs(10, 3.9, 20, null, null);
+        for (var s = 0; s <= 60; s += 2)
+        {
+            tracker.Add(placeholder, T0.AddSeconds(s), Config, null, complete: false);
+        }
+
+        Assert.Equal((true, (double?)null), tracker.StartSwitch(PowerModeKind.Grid, PowerModeKind.Station, T0.AddSeconds(61)));
+
+        for (var s = 62; s <= 120; s += 2)
+        {
+            tracker.Add(Grid, T0.AddSeconds(s), Config, null, complete: s > 100);
+        }
+
+        var (_, reference) = tracker.StartSwitch(PowerModeKind.Grid, PowerModeKind.Station, T0.AddSeconds(121));
+        Assert.Equal(PowerEstimator.Estimate(Config, Grid).TotalW, reference!.Value, 6);
+        Assert.Contains(tracker.History.Points, p => !p.Complete);
+    }
+
+    [Theory]
+    [InlineData(null, 40.0)]
+    [InlineData(40.0, null)]
+    public void Calibrating_in_a_saving_mode_does_not_shift_vs_grid(double? before, double? after)
+    {
+        var tracker = new PowerTracker();
+        var old = before is { } b ? new PowerCalibration(b, T0) : null;
+        var now = after is { } a ? new PowerCalibration(a, T0) : null;
+        for (var s = 0; s <= 60; s += 2)
+        {
+            tracker.Add(Grid, T0.AddSeconds(s), Config, old);
+        }
+
+        var (_, reference) = tracker.StartSwitch(PowerModeKind.Grid, PowerModeKind.Station, T0.AddSeconds(61));
+        for (var s = 62; s <= 100; s += 2)
+        {
+            tracker.Add(Station, T0.AddSeconds(s), Config, old);
+        }
+
+        for (var s = 102; s <= 160; s += 2)
+        {
+            tracker.Add(Station, T0.AddSeconds(s), Config, now);
+        }
+
+        var card = tracker.Card(Config, now, PowerModeKind.Station, reference, null, T0.AddSeconds(160));
+
+        var saving = PowerEstimator.Estimate(Config, Grid).TotalW - PowerEstimator.Estimate(Config, Station).TotalW;
+        Assert.Equal(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"▼ {saving:0} W vs Grid"), card.DeltaText);
+        var offset = after ?? 0;
+        Assert.Equal(PowerEstimator.Estimate(Config, Grid).TotalW + offset, card.History[0].TotalW, 6);
+        Assert.Equal(PowerEstimator.Estimate(Config, Station).TotalW + offset, card.History[^1].TotalW, 6);
+        Assert.Same(card.History, tracker.Card(Config, now, PowerModeKind.Station, reference, null, T0.AddSeconds(160)).History);
+    }
+
+    [Fact]
+    public void The_plotted_range_keeps_a_wide_spread_and_widens_a_narrow_one()
+    {
+        PowerPoint[] wide = [new(T0, 100), new(T0.AddSeconds(2), 160)];
+        PowerPoint[] narrow = [new(T0, 124), new(T0.AddSeconds(2), 132)];
+        PowerPoint[] low = [new(T0, 5), new(T0.AddSeconds(2), 9)];
+
+        Assert.Equal((100, 160), PowerHistory.PlotRange(wide));
+        Assert.Equal((108, 148), PowerHistory.PlotRange(narrow));
+        Assert.Equal((0, PowerHistory.MinRangeW), PowerHistory.PlotRange(low));
+        Assert.Equal((0, PowerHistory.MinRangeW), PowerHistory.PlotRange([]));
+    }
+
+    [Fact]
+    public void The_card_labels_name_the_plotted_range()
+    {
+        PowerPoint[] narrow = [new(T0, 124), new(T0.AddSeconds(2), 132)];
+
+        var card = PowerCards.Build(null, null, null, narrow, null, T0.AddSeconds(2));
+
+        Assert.Equal(("108", "148"), (card.MinLabel, card.MaxLabel));
     }
 }

@@ -48,8 +48,11 @@ public sealed class PersistedState
     /// <summary>The offset that aligns the power estimate with the station's display; null = not calibrated.</summary>
     public PowerCalibration? PowerCalibration { get; set; }
 
-    /// <summary>Mean estimated watts over the last minute in Grid before the last switch to a saving mode.</summary>
-    public double? GridReferenceW { get; set; }
+    /// <summary>
+    /// Mean uncalibrated estimate over the last minute in Grid before the last switch to a saving mode. Renamed from
+    /// <c>gridReferenceW</c>, which held calibrated watts: such a value is ignored once (no reference until the next switch).
+    /// </summary>
+    public double? GridReferenceRawW { get; set; }
 
     /// <summary>The options of a mode (defaults when never set). Read-only: change them with <see cref="WithOptions"/>.</summary>
     public ModeOptions OptionsFor(PowerModeKind mode) => Options.TryGetValue(mode, out var options) ? options : new ModeOptions();

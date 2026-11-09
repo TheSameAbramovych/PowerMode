@@ -5,15 +5,16 @@ using PowerMode.Core.Presentation;
 namespace PowerMode.App.Infrastructure;
 
 /// <summary>
-/// Live values for the right column. CPU watts are not measurable without a kernel driver, so CPU shows the
-/// effective clock (% Processor Performance × nominal MHz) and % Processor Utility from PDH.
+/// Live values for the right column and the power estimate. CPU watts are not measurable without a kernel driver, so
+/// CPU shows the effective clock (% Processor Performance × nominal MHz) and % Processor Utility from PDH.
 /// </summary>
 internal sealed class LiveProbe : IDisposable
 {
     private const string PerformanceCounter = @"\Processor Information(_Total)\% Processor Performance";
     private const string UtilityCounter = @"\Processor Information(_Total)\% Processor Utility";
     private const string FrequencyCounter = @"\Processor Information(_Total)\Processor Frequency";
-    private static readonly TimeSpan SlowInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan VisibleInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan HiddenInterval = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan DdcTimeout = TimeSpan.FromSeconds(5);
 
     private readonly NvmlProvider _nvml;
@@ -23,8 +24,13 @@ internal sealed class LiveProbe : IDisposable
     private IntPtr _performance;
     private IntPtr _utility;
     private IntPtr _frequency;
-    private DateTime _slowReadAt = DateTime.MinValue;
-    private LiveValues _slow = LiveValues.Empty;
+    private DateTime _brightnessReadAt = DateTime.MinValue;
+    private DateTime _dockerReadAt = DateTime.MinValue;
+
+    /// <summary>DDC/CI brightness per display device from the last read; null before the first one.</summary>
+    private Dictionary<string, int>? _ddc;
+    private int? _panel;
+    private (bool Running, int Containers)? _dockerLive;
     private bool _disposed;
 
     public LiveProbe(NvmlProvider nvml, DockerLever docker)
@@ -51,24 +57,58 @@ internal sealed class LiveProbe : IDisposable
     }
 
     /// <summary>
-    /// CPU and GPU every call; monitor (DDC/CI) and Docker at most every 10 s and only when <paramref name="includeSlow"/>
-    /// (never during a switch: DDC reads would interleave with the brightness writes).
+    /// CPU, GPU, the display topology and refresh rates every call. Monitor brightness (DDC/CI, and WMI for a built-in
+    /// panel) at most every 10 s while the flyout is open and every 60 s otherwise, only when <paramref name="allowDdc"/>
+    /// (never during a switch or a re-apply: DDC reads would interleave with the brightness writes); cached per device
+    /// in between. Docker at most every 10 s, only while the flyout is open.
     /// </summary>
-    public async Task<LiveValues> ReadAsync(bool includeSlow, CancellationToken cancellationToken)
+    /// <param name="flyoutVisible">The flyout is open.</param>
+    /// <param name="allowDdc">No switch or re-apply is running.</param>
+    /// <param name="fallbackPercent">The brightness assumed until it has been read once (see <see cref="LiveMonitors.Fallback"/>).</param>
+    /// <param name="cancellationToken">Cancels the reads.</param>
+    public async Task<LiveValues> ReadAsync(bool flyoutVisible, bool allowDdc, int? fallbackPercent, CancellationToken cancellationToken)
     {
         var (ghz, utility) = ReadCpu();
         var gpu = _nvml.PowerWatts();
-        if (includeSlow && DateTime.UtcNow - _slowReadAt > SlowInterval)
+        var now = DateTime.UtcNow;
+        if (allowDdc && now - _brightnessReadAt > (flyoutVisible ? VisibleInterval : HiddenInterval))
         {
-            _slowReadAt = DateTime.UtcNow;
-            _slow = await ReadSlowAsync(cancellationToken).ConfigureAwait(false);
+            _brightnessReadAt = now;
+            await ReadBrightnessAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return _slow with { CpuGhz = ghz, CpuUtilityPercent = utility, GpuWatts = gpu };
+        if (flyoutVisible && now - _dockerReadAt > VisibleInterval)
+        {
+            _dockerReadAt = now;
+            _dockerLive = await _docker.ReadLiveAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        List<DisplayReading> displays;
+        try
+        {
+            displays = await NativeCall.RunAsync(ReadDisplays, DdcTimeout, "Displays", cancellationToken).ConfigureAwait(false);
+        }
+        catch (Core.Levers.LeverException)
+        {
+            displays = [];
+        }
+
+        var monitors = LiveMonitors.Merge(displays, _ddc, _panel, fallbackPercent);
+        var primary = monitors.FirstOrDefault();
+        return new LiveValues(
+            CpuGhz: ghz,
+            CpuUtilityPercent: utility,
+            GpuWatts: gpu,
+            BrightnessPercent: primary?.BrightnessPercent,
+            RefreshHz: primary?.RefreshHz,
+            DockerEngineRunning: _dockerLive?.Running,
+            DockerContainersRunning: _dockerLive?.Containers,
+            Monitors: monitors.Count > 1 ? monitors : null,
+            BrightnessKnown: _ddc is not null);
     }
 
-    /// <summary>Force the monitor/Docker values to be read again on the next call (after a switch).</summary>
-    public void Invalidate() => _slowReadAt = DateTime.MinValue;
+    /// <summary>Read the monitor brightness again on the next allowed call (after a switch or a re-apply).</summary>
+    public void Invalidate() => _brightnessReadAt = DateTime.MinValue;
 
     public double? GpuWatts() => _nvml.PowerWatts();
 
@@ -93,35 +133,23 @@ internal sealed class LiveProbe : IDisposable
             ? value.DoubleValue
             : null;
 
-    private async Task<LiveValues> ReadSlowAsync(CancellationToken cancellationToken)
+    /// <summary>DDC/CI brightness per display device (the first physical monitor of each), and the built-in panel's through WMI.</summary>
+    private async Task ReadBrightnessAsync(CancellationToken cancellationToken)
     {
-        List<MonitorLive> monitors;
         try
         {
-            monitors = await NativeCall.RunAsync(ReadMonitors, DdcTimeout, "Monitors", cancellationToken).ConfigureAwait(false);
+            var (ddc, panel) = await NativeCall.RunAsync(ReadBrightness, DdcTimeout, "Monitors", cancellationToken).ConfigureAwait(false);
+            _ddc = ddc;
+            _panel = panel;
         }
         catch (Core.Levers.LeverException)
         {
-            monitors = [];
+            // Keep the last values; the next interval reads again.
         }
-
-        var docker = await _docker.ReadLiveAsync(cancellationToken).ConfigureAwait(false);
-        var primary = monitors.FirstOrDefault();
-        return new LiveValues(
-            BrightnessPercent: primary?.BrightnessPercent,
-            RefreshHz: primary?.RefreshHz,
-            DockerEngineRunning: docker?.Running,
-            DockerContainersRunning: docker?.Containers,
-            Monitors: monitors.Count > 1 ? monitors : null);
     }
 
-    /// <summary>
-    /// Every connected monitor, primary first: name, brightness (DDC/CI of the first physical monitor on its display,
-    /// or the laptop panel through WMI), the display's refresh rate, and whether it is on.
-    /// </summary>
-    private static List<MonitorLive> ReadMonitors()
+    private static (Dictionary<string, int> Ddc, int? Panel) ReadBrightness()
     {
-        var modes = DisplayModeLever.CurrentModes().ToDictionary(m => m.Device, m => m.RefreshHz, StringComparer.OrdinalIgnoreCase);
         var brightness = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         using (var ddc = DdcMonitors.Open())
         {
@@ -135,28 +163,18 @@ internal sealed class LiveProbe : IDisposable
             }
         }
 
-        var panel = PanelBrightness.Read();
-        var monitors = new List<MonitorLive>();
-        foreach (var display in Displays.All())
-        {
-            if (display.Device is not { } device)
-            {
-                monitors.Add(new MonitorLive(display.Name, null, null, Active: false));
-                continue;
-            }
+        return (brightness, PanelBrightness.Read());
+    }
 
-            int? percent = brightness.TryGetValue(device, out var b) ? b : null;
-            if (percent is null && panel is { } built)
-            {
-                // The panel has no DDC/CI; the first monitor without it is the panel.
-                percent = built;
-                panel = null;
-            }
-
-            monitors.Add(new MonitorLive(display.Name, percent, modes.TryGetValue(device, out var hz) ? hz : null));
-        }
-
-        return monitors;
+    /// <summary>Every connected monitor, primary first, with its display's refresh rate; no DDC/CI.</summary>
+    private static List<DisplayReading> ReadDisplays()
+    {
+        var modes = DisplayModeLever.CurrentModes().ToDictionary(m => m.Device, m => m.RefreshHz, StringComparer.OrdinalIgnoreCase);
+        return [.. Displays.All().Select(d => new DisplayReading(
+            d.Name,
+            d.Device,
+            d.Internal,
+            d.Device is { } device && modes.TryGetValue(device, out var hz) ? hz : null))];
     }
 
     public void Dispose()

@@ -47,7 +47,7 @@ internal static class CliRunner
         using var services = AppServices.Create();
         services.RefreshMachine();
         await Task.Delay(CounterSampleGap).ConfigureAwait(false);
-        var live = await services.Live.ReadAsync(includeSlow: true, CancellationToken.None).ConfigureAwait(false);
+        var live = await services.ReadLiveAsync(flyoutVisible: true, allowDdc: true).ConfigureAwait(false);
         var autostart = await services.Autostart.IsInstalledAsync(CancellationToken.None).ConfigureAwait(false);
         Console.Write(TextReports.Status(services.BuildState(live, autostart, power: services.PowerCardOf(live))));
         return ExitOk;
@@ -67,7 +67,7 @@ internal static class CliRunner
         using var services = AppServices.Create();
         await services.RecoverLostModeAsync().ConfigureAwait(false);
         var outcome = await services.Switcher.SwitchAsync(mode).ConfigureAwait(false);
-        var live = await services.Live.ReadAsync(includeSlow: true, CancellationToken.None).ConfigureAwait(false);
+        var live = await services.ReadLiveAsync(flyoutVisible: true, allowDdc: true).ConfigureAwait(false);
         var autostart = await services.Autostart.IsInstalledAsync(CancellationToken.None).ConfigureAwait(false);
         Console.Write(TextReports.Status(services.BuildState(live, autostart, power: services.PowerCardOf(live))));
         return outcome.FailedCount == 0 ? ExitOk : ExitFailedLevers;
