@@ -27,6 +27,7 @@ public static class RenderFixtures
     public const string SettingsAppsSaved = "settings-apps-saved.png";
     public const string HeroGrid = "hero-grid.png";
     public const string HeroCalibrating = "hero-calibrating.png";
+    public const string StationTwoMonitors = "station-two-monitors.png";
 
     /// <summary>An app with a long name, closed in Reserve, so the settings render shows how such a name wraps.</summary>
     public const string LongName = "Adobe Creative Cloud Experience";
@@ -85,6 +86,7 @@ public static class RenderFixtures
             new(SettingsAppsSaved, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false, SettingsPage(config), SettingsFeedback.SavedAt(Now)),
             new(HeroGrid, Build(config, PowerModeKind.Grid, null, _ => { }, [], gridLive, isElevated: true, Calibration), false),
             new(HeroCalibrating, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true, Calibration), false, CalibrationReading: "186"),
+            new(StationTwoMonitors, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive with { Monitors = [new MonitorLive("M27Q2", 35, 59), new MonitorLive("T24i-30", 35, 60)] }, isElevated: true), false),
         ];
     }
 

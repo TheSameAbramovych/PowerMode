@@ -16,7 +16,6 @@ internal sealed class DockerLever : ILever
     public const string Tool = "docker";
     private const string ExecutableName = "docker.exe";
     private const string KnownLocation = @"C:\Program Files\Docker\Docker\resources\bin\docker.exe";
-    private const string NotInstalled = "Docker is not installed";
     private const string StatusUnavailable = "Docker Desktop status unavailable (docker desktop status and docker ps failed, or the engine is still starting)";
     private static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(120);
@@ -36,6 +35,9 @@ internal sealed class DockerLever : ILever
         _launcher = launcher;
         _config = config;
     }
+
+    /// <summary>The Docker CLI exists on this PC.</summary>
+    public bool IsInstalled => _docker.Value is not null;
 
     public LeverKind Kind => LeverKind.Docker;
 
@@ -102,7 +104,7 @@ internal sealed class DockerLever : ILever
 
         if (_docker.Value is null)
         {
-            return LeverPlan.Fail(NotInstalled, permanent: true);
+            return LeverPlan.Skip(MachineInfo.DockerNotInstalled);
         }
 
         var status = await StatusAsync(cancellationToken).ConfigureAwait(false);

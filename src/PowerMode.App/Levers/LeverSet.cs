@@ -19,6 +19,7 @@ internal sealed class LeverSet : IDisposable
         Levers =
         [
             Powercfg,
+            new SecondaryDisplaysLever(),
             new DisplayModeLever(),
             new DdcBrightnessLever(),
             new NvmlGpuLever(Nvml),

@@ -5,7 +5,10 @@ using PowerMode.Core.Model;
 
 namespace PowerMode.App.Levers;
 
-/// <summary>Monitor brightness over DDC/CI (dxva2) on every physical monitor; Grid restores brightness and contrast.</summary>
+/// <summary>
+/// Monitor brightness over DDC/CI (dxva2) on every physical monitor, and on a laptop's built-in panel through WMI;
+/// Grid restores brightness and contrast.
+/// </summary>
 internal sealed class DdcBrightnessLever : ILever
 {
     private const string What = "DDC/CI";
@@ -56,6 +59,11 @@ internal sealed class DdcBrightnessLever : ILever
             {
                 levels.Add(new MonitorLevel(monitor.Id, (int)brightness.Current, DdcMonitors.Contrast(monitor) is { } contrast ? (int)contrast.Current : null));
             }
+        }
+
+        if (PanelBrightness.Read() is { } panel)
+        {
+            levels.Add(new MonitorLevel(PanelBrightness.Id, panel));
         }
 
         return (levels, monitors.Monitors.Count);
@@ -109,6 +117,17 @@ internal sealed class DdcBrightnessLever : ILever
             if (saved.Contrast is { } contrast && DdcMonitors.Contrast(monitor) is { } currentContrast && currentContrast.Current != (uint)contrast)
             {
                 actions.Add(SetAction(monitor, "contrast", currentContrast.Current, (uint)contrast, isContrast: true));
+            }
+        }
+
+        if (PanelBrightness.Read() is { } current)
+        {
+            answered++;
+            var wanted = target.BrightnessPercent ?? target.Restore.FirstOrDefault(m => m.Id == PanelBrightness.Id)?.Brightness;
+            if (wanted is { } percent && percent != current)
+            {
+                actions.Add(new LeverAction($"Built-in panel: brightness {current} % -> {percent} %", ct => NativeCall.RunAsync(
+                    () => PanelBrightness.Set(percent) ? true : throw new LeverException("The built-in panel refused the brightness"), Timeout, What, ct)));
             }
         }
 

@@ -22,6 +22,7 @@ internal sealed unsafe class Nvml : IDisposable
     private readonly delegate* unmanaged<IntPtr, uint*, uint*, int> _getConstraints;
     private readonly delegate* unmanaged<IntPtr, uint*, int> _getDefaultLimit;
     private readonly delegate* unmanaged<IntPtr, uint, int> _setLimit;
+    private readonly delegate* unmanaged<IntPtr, byte*, uint, int> _getName;
     private bool _disposed;
 
     private Nvml(IntPtr library)
@@ -36,6 +37,7 @@ internal sealed unsafe class Nvml : IDisposable
         _getConstraints = (delegate* unmanaged<IntPtr, uint*, uint*, int>)NativeLibrary.GetExport(library, "nvmlDeviceGetPowerManagementLimitConstraints");
         _getDefaultLimit = (delegate* unmanaged<IntPtr, uint*, int>)NativeLibrary.GetExport(library, "nvmlDeviceGetPowerManagementDefaultLimit");
         _setLimit = (delegate* unmanaged<IntPtr, uint, int>)NativeLibrary.GetExport(library, "nvmlDeviceSetPowerManagementLimit");
+        _getName = (delegate* unmanaged<IntPtr, byte*, uint, int>)NativeLibrary.GetExport(library, "nvmlDeviceGetName");
     }
 
     /// <summary>Load and initialise NVML; null when there is no NVIDIA driver.</summary>
@@ -109,6 +111,15 @@ internal sealed unsafe class Nvml : IDisposable
         uint max;
         Check(_getConstraints(device, &min, &max), "nvmlDeviceGetPowerManagementLimitConstraints");
         return (min, max);
+    }
+
+    /// <summary>The product name, e.g. <c>NVIDIA GeForce RTX 3060</c>.</summary>
+    public string Name(IntPtr device)
+    {
+        const int length = 96;
+        var buffer = stackalloc byte[length];
+        Check(_getName(device, buffer, length), "nvmlDeviceGetName");
+        return Marshal.PtrToStringUTF8((IntPtr)buffer) ?? "NVIDIA GPU";
     }
 
     /// <summary>Returns the NVML code: <see cref="Success"/>, <see cref="NoPermission"/> (not elevated), ...</summary>

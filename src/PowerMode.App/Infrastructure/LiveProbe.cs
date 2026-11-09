@@ -95,33 +95,68 @@ internal sealed class LiveProbe : IDisposable
 
     private async Task<LiveValues> ReadSlowAsync(CancellationToken cancellationToken)
     {
-        int? brightness = null;
+        List<MonitorLive> monitors;
         try
         {
-            brightness = await NativeCall.RunAsync(ReadBrightnessPercent, DdcTimeout, "DDC/CI", cancellationToken).ConfigureAwait(false);
+            monitors = await NativeCall.RunAsync(ReadMonitors, DdcTimeout, "Monitors", cancellationToken).ConfigureAwait(false);
         }
         catch (Core.Levers.LeverException)
         {
-            brightness = null;
+            monitors = [];
         }
 
-        var refresh = DisplayModeLever.CurrentModes().FirstOrDefault()?.RefreshHz;
         var docker = await _docker.ReadLiveAsync(cancellationToken).ConfigureAwait(false);
-        return new LiveValues(BrightnessPercent: brightness, RefreshHz: refresh, DockerEngineRunning: docker?.Running, DockerContainersRunning: docker?.Containers);
+        var primary = monitors.FirstOrDefault();
+        return new LiveValues(
+            BrightnessPercent: primary?.BrightnessPercent,
+            RefreshHz: primary?.RefreshHz,
+            DockerEngineRunning: docker?.Running,
+            DockerContainersRunning: docker?.Containers,
+            Monitors: monitors.Count > 1 ? monitors : null);
     }
 
-    private static int? ReadBrightnessPercent()
+    /// <summary>
+    /// Every connected monitor, primary first: name, brightness (DDC/CI of the first physical monitor on its display,
+    /// or the laptop panel through WMI), the display's refresh rate, and whether it is on.
+    /// </summary>
+    private static List<MonitorLive> ReadMonitors()
     {
-        using var monitors = DdcMonitors.Open();
-        foreach (var monitor in monitors.Monitors)
+        var modes = DisplayModeLever.CurrentModes().ToDictionary(m => m.Device, m => m.RefreshHz, StringComparer.OrdinalIgnoreCase);
+        var brightness = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        using (var ddc = DdcMonitors.Open())
         {
-            if (DdcMonitors.Brightness(monitor) is { } b)
+            foreach (var monitor in ddc.Monitors)
             {
-                return DdcMonitors.ToPercent(b.Current, b.Min, b.Max);
+                var device = monitor.Id[..monitor.Id.LastIndexOf('#')];
+                if (!brightness.ContainsKey(device) && DdcMonitors.Brightness(monitor) is { } b)
+                {
+                    brightness[device] = DdcMonitors.ToPercent(b.Current, b.Min, b.Max);
+                }
             }
         }
 
-        return null;
+        var panel = PanelBrightness.Read();
+        var monitors = new List<MonitorLive>();
+        foreach (var display in Displays.All())
+        {
+            if (display.Device is not { } device)
+            {
+                monitors.Add(new MonitorLive(display.Name, null, null, Active: false));
+                continue;
+            }
+
+            int? percent = brightness.TryGetValue(device, out var b) ? b : null;
+            if (percent is null && panel is { } built)
+            {
+                // The panel has no DDC/CI; the first monitor without it is the panel.
+                percent = built;
+                panel = null;
+            }
+
+            monitors.Add(new MonitorLive(display.Name, percent, modes.TryGetValue(device, out var hz) ? hz : null));
+        }
+
+        return monitors;
     }
 
     public void Dispose()

@@ -286,7 +286,7 @@ public sealed class PresentationTests
             [
                 RenderFixtures.Grid, RenderFixtures.GridRestored, RenderFixtures.Station, RenderFixtures.Reserve, RenderFixtures.StationApplying,
                 RenderFixtures.StationFailed, RenderFixtures.ReserveFailed, RenderFixtures.ReserveLight, RenderFixtures.SettingsApps, RenderFixtures.SettingsAppsLight,
-                RenderFixtures.SettingsAppsSaved, RenderFixtures.HeroGrid, RenderFixtures.HeroCalibrating,
+                RenderFixtures.SettingsAppsSaved, RenderFixtures.HeroGrid, RenderFixtures.HeroCalibrating, RenderFixtures.StationTwoMonitors,
             ],
             fixtures.Select(f => f.FileName));
 

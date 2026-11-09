@@ -15,6 +15,26 @@ internal sealed class NvmlProvider : IDisposable
 
     public string Error => _session.Value.Error ?? string.Empty;
 
+    /// <summary>The first NVIDIA GPU: name and the limit range it accepts; null without NVML or on a read error.</summary>
+    public GpuInfo? Info()
+    {
+        if (Session is not { } nvml || nvml.DeviceCount() == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var device = nvml.Device(0);
+            var (min, max) = nvml.Constraints(device);
+            return new GpuInfo(nvml.Name(device), (int)(min / 1000), (int)(max / 1000));
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Total board power of all NVIDIA GPUs in watts, or null when unavailable.</summary>
     public double? PowerWatts()
     {
@@ -88,7 +108,7 @@ internal sealed class NvmlGpuLever : ILever
     {
         if (_nvml.Session is not { } nvml)
         {
-            return LeverPlan.Fail(_nvml.Error);
+            return LeverPlan.Skip(MachineInfo.NoNvidiaGpu);
         }
 
         var actions = new List<LeverAction>();

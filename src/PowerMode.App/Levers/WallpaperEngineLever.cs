@@ -16,6 +16,7 @@ internal sealed class WallpaperEngineLever : ILever
     private const string ProcessName = "wallpaper64";
     private const string ControlFlag = "-control";
     private const string Tool = "Wallpaper Engine";
+    private const string NotInstalled = "Wallpaper Engine not installed";
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
 
     private readonly IProcessRunner _runner;
@@ -47,7 +48,7 @@ internal sealed class WallpaperEngineLever : ILever
 
         if (RunningPath() is not { } running)
         {
-            return Task.FromResult(LeverPlan.Done);
+            return Task.FromResult(File.Exists(_config().WallpaperEngine.Path) ? LeverPlan.Done : LeverPlan.Skip(NotInstalled));
         }
 
         var path = File.Exists(_config().WallpaperEngine.Path) ? _config().WallpaperEngine.Path : running;

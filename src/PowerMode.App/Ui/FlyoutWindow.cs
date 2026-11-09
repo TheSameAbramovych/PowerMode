@@ -18,6 +18,7 @@ internal sealed class FlyoutWindow : Window
 {
     /// <summary>Space kept free between the flyout and the work-area edges, in total.</summary>
     private const double WorkAreaReserve = 24;
+    private const string TaskbarClass = "Shell_TrayWnd";
 
     /// <summary>The flyout grows with its content up to the work-area height (less a margin); the lever table never scrolls.</summary>
     public static double MaxFlyoutHeight => SystemParameters.WorkArea.Height - WorkAreaReserve;
@@ -79,7 +80,7 @@ internal sealed class FlyoutWindow : Window
     public void ShowFlyout()
     {
         // The work area may have changed (resolution, taskbar) since the last show.
-        MaxHeight = MaxFlyoutHeight;
+        MaxHeight = TaskbarWorkArea().Height - WorkAreaReserve;
         Show();
 
         // Safeguard: lay out and paint the content now, so a shown flyout is never left with only its background.
@@ -151,9 +152,24 @@ internal sealed class FlyoutWindow : Window
         base.OnKeyDown(e);
     }
 
+    /// <summary>The work area (DIPs) of the monitor that holds the taskbar and its tray; the primary one when unknown.</summary>
+    private System.Windows.Rect TaskbarWorkArea()
+    {
+        var tray = User32.FindWindow(TaskbarClass, null);
+        var info = MonitorInfoEx.Create();
+        if (tray == IntPtr.Zero || !User32.GetMonitorInfo(User32.MonitorFromWindow(tray, User32.MonitorDefaultToPrimary), ref info))
+        {
+            return SystemParameters.WorkArea;
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var work = info.WorkArea;
+        return new System.Windows.Rect(work.Left / dpi.DpiScaleX, work.Top / dpi.DpiScaleY, (work.Right - work.Left) / dpi.DpiScaleX, (work.Bottom - work.Top) / dpi.DpiScaleY);
+    }
+
     private void Reposition()
     {
-        var area = SystemParameters.WorkArea;
+        var area = TaskbarWorkArea();
         var config = _config();
         var height = ActualHeight > 0 ? ActualHeight : DesiredSize.Height;
         Left = config.Anchor is FlyoutAnchor.BottomLeft or FlyoutAnchor.TopLeft ? area.Left + config.Margin : area.Right - Width - config.Margin;

@@ -17,6 +17,9 @@ internal sealed class DisplayModeLever : ILever
 
     public LeverKind Kind => LeverKind.DisplayMode;
 
+    /// <summary>Turning displays off or back on changes their modes; set the rate after it.</summary>
+    public LeverKind? RunsAfter => LeverKind.SecondaryDisplays;
+
     public Task CaptureAsync(Snapshot snapshot, AppConfig config, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -42,14 +45,24 @@ internal sealed class DisplayModeLever : ILever
         foreach (var display in current)
         {
             // Within a hertz is already there (60 Hz reads back as 59 Hz); changing it again would blank the screen.
-            DisplayModeInfo? wanted = target.RefreshHz is { } hz
-                ? RefreshRates.Same(display.RefreshHz, hz) ? null
-                    : RefreshRates.Pick(OfferedRates(display), hz) is { } offered ? display with { RefreshHz = offered } : null
-                : target.Restore.FirstOrDefault(d => string.Equals(d.Device, display.Device, StringComparison.OrdinalIgnoreCase));
+            // A display without the rate gets its lowest rate from 50 Hz; one display never fails the whole lever.
+            var note = string.Empty;
+            DisplayModeInfo? wanted;
+            if (target.RefreshHz is { } hz)
+            {
+                var choice = RefreshRates.Same(display.RefreshHz, hz) ? null : DisplayDecisions.ChooseRefresh(OfferedRates(display), hz);
+                wanted = choice is { } c && !RefreshRates.Same(display.RefreshHz, c.Hz) ? display with { RefreshHz = c.Hz } : null;
+                note = choice is { Fallback: true } ? $" (no {hz} Hz at this resolution; its lowest rate from {DisplayDecisions.MinFallbackHz} Hz)" : string.Empty;
+            }
+            else
+            {
+                wanted = target.Restore.FirstOrDefault(d => string.Equals(d.Device, display.Device, StringComparison.OrdinalIgnoreCase));
+            }
+
             if (wanted is not null && !wanted.Matches(display))
             {
                 actions.Add(new LeverAction(
-                    $"{display.Device}: {Describe(display)} -> {Describe(wanted)}",
+                    $"{display.Device}: {Describe(display)} -> {Describe(wanted)}{note}",
                     ct => NativeCall.RunAsync(() => Change(wanted), Timeout, What, ct)));
             }
         }
