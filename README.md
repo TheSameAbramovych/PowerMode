@@ -88,7 +88,9 @@ The GPU limit and Windows services need administrator rights. The app never asks
 (`asInvoker` manifest). Instead, **Start with Windows** (flyout footer, tray menu or `--install-autostart`)
 creates the scheduled task `PowerMode`: at logon of this user, *run with highest privileges*, no battery
 conditions, no time limit, started in the exe folder. Creating it asks for UAC once. Without the task, use
-**Restart as administrator** when a lever needs it.
+**Restart as administrator** when a lever needs it. The task runs PowerMode at normal priority (task priority 4);
+a task installed by an earlier build ran it below normal (priority 7) and keeps that until you run
+`PowerMode.exe --install-autostart` again (it replaces the task).
 
 When PowerMode runs elevated, apps it relaunches (Steam, OneDrive, …) and Docker Desktop are started through
 the desktop shell, so they run as you, not as administrator.
