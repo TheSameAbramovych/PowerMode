@@ -8,7 +8,7 @@ public enum TopologyAction
     /// <summary>Only one display is connected: skipped, not failed.</summary>
     SkipOneDisplay,
 
-    /// <summary>Switch to the primary display only (SDC_TOPOLOGY_INTERNAL).</summary>
+    /// <summary>Switch to the primary display only (its paths applied alone).</summary>
     PrimaryOnly,
 
     /// <summary>Put the saved topology back (secondary displays on again).</summary>
@@ -39,6 +39,38 @@ public static class DisplayDecisions
         }
 
         return target.Restore is { } saved && activeDisplays < saved.ActiveDisplays ? TopologyAction.Restore : TopologyAction.Done;
+    }
+
+    /// <summary>
+    /// The monitors that must answer over DDC/CI but did not: those Grid restores, or in a saving mode those of the
+    /// baseline, that are connected now (<paramref name="enumerated"/>) and gave no reading (<paramref name="answered"/>).
+    /// A monitor that is not connected (unplugged, off) or never answered at capture (no DDC/CI, a TV) is not counted.
+    /// </summary>
+    public static IReadOnlyList<string> SilentMonitors(MonitorTarget target, IEnumerable<string> enumerated, IEnumerable<string> answered)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var owed = target.BrightnessPercent is null ? target.Restore.Select(m => m.Id) : target.Baseline ?? [];
+        var connected = enumerated.ToHashSet(StringComparer.Ordinal);
+        var read = answered.ToHashSet(StringComparer.Ordinal);
+        return [.. owed.Distinct(StringComparer.Ordinal).Where(id => connected.Contains(id) && !read.Contains(id))];
+    }
+
+    /// <summary>A saving mode dims a monitor only when Grid can put it back (it is in the baseline, or no baseline is known).</summary>
+    public static bool Dims(MonitorTarget target, string id)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return target.Baseline is null || target.Baseline.Contains(id, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// The levels of two reads one after the other, per monitor the first value that came back (so a monitor that
+    /// answered only once is still in the baseline).
+    /// </summary>
+    public static List<MonitorLevel> MergeReads(IEnumerable<MonitorLevel> first, IEnumerable<MonitorLevel> second)
+    {
+        ArgumentNullException.ThrowIfNull(first);
+        ArgumentNullException.ThrowIfNull(second);
+        return [.. first.Concat(second).DistinctBy(m => m.Id, StringComparer.Ordinal)];
     }
 
     /// <summary>

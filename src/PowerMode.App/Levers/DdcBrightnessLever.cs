@@ -28,17 +28,19 @@ internal sealed class DdcBrightnessLever : ILever
     public LeverRetry Retry { get; } = new(TimeSpan.FromSeconds(2), 6, RetryDelay);
 
     /// <summary>
-    /// Record brightness and contrast. No monitor at all is a legitimately empty baseline; monitors that are there but
-    /// do not answer (DDC/CI reads fail for a moment) are retried once and otherwise make the capture inconclusive.
+    /// Record brightness and contrast. No monitor at all is a legitimately empty baseline. When fewer monitors answer
+    /// than are there (DDC/CI reads fail for a moment, or a monitor has none), read once more and keep every monitor
+    /// that answered either time; when none answered both times, the capture is inconclusive.
     /// </summary>
     public async Task CaptureAsync(Snapshot snapshot, AppConfig config, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         var (levels, enumerated) = await NativeCall.RunAsync(ReadAll, Timeout, What, cancellationToken).ConfigureAwait(false);
-        if (levels.Count == 0 && enumerated > 0)
+        if (levels.Count(l => l.Id != PanelBrightness.Id) < enumerated)
         {
             await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
-            (levels, enumerated) = await NativeCall.RunAsync(ReadAll, Timeout, What, cancellationToken).ConfigureAwait(false);
+            var (again, _) = await NativeCall.RunAsync(ReadAll, Timeout, What, cancellationToken).ConfigureAwait(false);
+            levels = DisplayDecisions.MergeReads(levels, again);
             if (levels.Count == 0 && enumerated > 0)
             {
                 throw new LeverException(NoMonitor);
@@ -80,11 +82,16 @@ internal sealed class DdcBrightnessLever : ILever
         return await NativeCall.RunAsync(() => Plan(target), Timeout, What, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Plan every monitor that answers. A monitor Grid restores (or, in a saving mode, one of the baseline) that is
+    /// connected but silent fails the plan, so it is retried and, if it stays silent, the lever stays owed and the
+    /// baseline is kept; a saving mode never dims a monitor outside the baseline, since Grid could not put it back.
+    /// </summary>
     private static LeverPlan Plan(MonitorTarget target)
     {
         using var monitors = DdcMonitors.Open();
         var actions = new List<LeverAction>();
-        var answered = 0;
+        var answered = new List<string>();
         foreach (var monitor in monitors.Monitors)
         {
             if (DdcMonitors.Brightness(monitor) is not { } brightness)
@@ -92,11 +99,11 @@ internal sealed class DdcBrightnessLever : ILever
                 continue;
             }
 
-            answered++;
+            answered.Add(monitor.Id);
             if (target.BrightnessPercent is { } percent)
             {
                 var value = DdcMonitors.FromPercent(percent, brightness.Min, brightness.Max);
-                if (value != brightness.Current)
+                if (value != brightness.Current && DisplayDecisions.Dims(target, monitor.Id))
                 {
                     actions.Add(SetAction(monitor, "brightness", brightness.Current, value, isContrast: false));
                 }
@@ -122,8 +129,10 @@ internal sealed class DdcBrightnessLever : ILever
 
         if (PanelBrightness.Read() is { } current)
         {
-            answered++;
-            var wanted = target.BrightnessPercent ?? target.Restore.FirstOrDefault(m => m.Id == PanelBrightness.Id)?.Brightness;
+            answered.Add(PanelBrightness.Id);
+            var wanted = target.BrightnessPercent is null
+                ? target.Restore.FirstOrDefault(m => m.Id == PanelBrightness.Id)?.Brightness
+                : DisplayDecisions.Dims(target, PanelBrightness.Id) ? target.BrightnessPercent : null;
             if (wanted is { } percent && percent != current)
             {
                 actions.Add(new LeverAction($"Built-in panel: brightness {current} % -> {percent} %", ct => NativeCall.RunAsync(
@@ -131,7 +140,19 @@ internal sealed class DdcBrightnessLever : ILever
             }
         }
 
-        return answered == 0 ? LeverPlan.Fail(NoMonitor) : LeverPlan.Of(actions);
+        if (answered.Count == 0)
+        {
+            return LeverPlan.Fail(NoMonitor);
+        }
+
+        var silent = DisplayDecisions.SilentMonitors(target, monitors.Monitors.Select(m => m.Id), answered);
+        if (silent.Count > 0)
+        {
+            var names = silent.Select(id => monitors.Monitors.First(m => m.Id == id)).Select(m => $"{m.Description} ({m.Id})");
+            return LeverPlan.Fail($"{string.Join(", ", names)} did not answer over DDC/CI");
+        }
+
+        return LeverPlan.Of(actions);
     }
 
     private static LeverAction SetAction(DdcMonitor monitor, string what, uint from, uint to, bool isContrast) =>

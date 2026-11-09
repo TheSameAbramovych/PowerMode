@@ -9,8 +9,11 @@ namespace PowerMode.Core.Model;
 /// </summary>
 public sealed record SchemeTarget(Guid Scheme, SchemeConfig? Configure, bool IsFallback = false);
 
-/// <summary>Either one brightness for every monitor, or restore each monitor from the snapshot.</summary>
-public sealed record MonitorTarget(int? BrightnessPercent, IReadOnlyList<MonitorLevel> Restore);
+/// <summary>
+/// Either one brightness for every monitor of <see cref="Baseline"/> (the monitor ids Grid can restore; null when no
+/// baseline is known, then every monitor), or restore each monitor from the snapshot (<see cref="Restore"/>).
+/// </summary>
+public sealed record MonitorTarget(int? BrightnessPercent, IReadOnlyList<MonitorLevel> Restore, IReadOnlyList<string>? Baseline = null);
 
 /// <summary>Either one refresh rate for every display that offers it, or restore each display mode.</summary>
 public sealed record RefreshTarget(int? RefreshHz, IReadOnlyList<DisplayModeInfo> Restore);

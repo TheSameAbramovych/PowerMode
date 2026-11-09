@@ -69,7 +69,7 @@ public static class TargetPlanner
         {
             Mode = mode,
             Scheme = new SchemeTarget(m.Scheme.Id, m.Scheme),
-            Monitor = m.BrightnessPercent is { } brightness ? new MonitorTarget(brightness, []) : null,
+            Monitor = m.BrightnessPercent is { } brightness ? new MonitorTarget(brightness, [], snapshot is null ? null : [.. snapshot.Monitors.Select(l => l.Id)]) : null,
             Refresh = m.RefreshRateHz is { } hz ? new RefreshTarget(hz, []) : null,
             Topology = m.SecondaryDisplaysOff ? new TopologyTarget(true, null)
                 : snapshot?.Topology is { } topology ? new TopologyTarget(false, topology) : null,
