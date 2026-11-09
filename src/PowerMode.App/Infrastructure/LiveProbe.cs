@@ -25,17 +25,28 @@ internal sealed class LiveProbe : IDisposable
     private IntPtr _frequency;
     private DateTime _slowReadAt = DateTime.MinValue;
     private LiveValues _slow = LiveValues.Empty;
+    private bool _disposed;
 
     public LiveProbe(NvmlProvider nvml, DockerLever docker)
     {
         _nvml = nvml;
         _docker = docker;
-        if (Pdh.PdhOpenQuery(null, IntPtr.Zero, out _query) == Pdh.Success)
+
+        // Off the calling (UI) thread: PDH loads the performance-counter providers, which can stall. Reads wait on the lock.
+        _ = Task.Run(OpenCounters);
+    }
+
+    private void OpenCounters()
+    {
+        lock (_gate)
         {
-            _ = Pdh.PdhAddEnglishCounter(_query, PerformanceCounter, IntPtr.Zero, out _performance);
-            _ = Pdh.PdhAddEnglishCounter(_query, UtilityCounter, IntPtr.Zero, out _utility);
-            _ = Pdh.PdhAddEnglishCounter(_query, FrequencyCounter, IntPtr.Zero, out _frequency);
-            _ = Pdh.PdhCollectQueryData(_query);
+            if (!_disposed && Pdh.PdhOpenQuery(null, IntPtr.Zero, out _query) == Pdh.Success)
+            {
+                _ = Pdh.PdhAddEnglishCounter(_query, PerformanceCounter, IntPtr.Zero, out _performance);
+                _ = Pdh.PdhAddEnglishCounter(_query, UtilityCounter, IntPtr.Zero, out _utility);
+                _ = Pdh.PdhAddEnglishCounter(_query, FrequencyCounter, IntPtr.Zero, out _frequency);
+                _ = Pdh.PdhCollectQueryData(_query);
+            }
         }
     }
 
@@ -117,6 +128,7 @@ internal sealed class LiveProbe : IDisposable
     {
         lock (_gate)
         {
+            _disposed = true;
             if (_query != IntPtr.Zero)
             {
                 _ = Pdh.PdhCloseQuery(_query);

@@ -19,13 +19,14 @@ namespace PowerMode.App;
 /// <summary>The tray app: icon, flyout, hotkeys, forwarded commands, system events and the switch queue.</summary>
 internal sealed class TrayController : IDisposable
 {
-    private const string Category = "tray";
+    internal const string Category = "tray";
     private static readonly TimeSpan FlyoutRefresh = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan TooltipRefresh = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan SpinnerStep = TimeSpan.FromMilliseconds(120);
     private static readonly TimeSpan DisplayDebounce = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan ResumeDelay = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan ReopenGuard = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan StartWatchdog = TimeSpan.FromSeconds(15);
     private static readonly LeverKind[] DisplayLevers = [LeverKind.DisplayMode, LeverKind.Brightness];
 
     private readonly App _app;
@@ -65,21 +66,33 @@ internal sealed class TrayController : IDisposable
         _displayDebounce = new DispatcherTimer(DisplayDebounce, DispatcherPriority.Normal, async (_, _) => await OnDisplaySettledAsync(), _app.Dispatcher) { IsEnabled = false };
     }
 
+    /// <summary>
+    /// Runs on the dispatcher once the message loop is up. The tray icon is shown first; nothing here waits for a
+    /// tool, the pipe or a lever: autostart state, lost-state recovery and the re-apply run afterwards, off this thread.
+    /// </summary>
     public void Start(bool openFlyout)
     {
-        System.Windows.Forms.Application.EnableVisualStyles();
-        _app.DispatcherUnhandledException += OnUnhandledException;
-        ApplyTheme();
-        Wire();
-        _hotkeys.Register(_services.Config.Current.Hotkeys);
-        _services.Config.StartWatching();
-        _instance.StartServer(_services.Log, OnForwarded);
-        _tray.Show();
-        _ = RefreshAutostartAsync();
-        Refresh();
-        _liveTimer.Start();
+        // If a step blocks this thread (the shell not answering the tray-icon call, say), the log names the step.
+        var step = "theme";
+        using (new Timer(_ => _services.Log.Write(Category, $"Start-up is still at step \"{step}\" after {StartWatchdog.TotalSeconds:0} s"), null, StartWatchdog, Timeout.InfiniteTimeSpan))
+        {
+            _app.DispatcherUnhandledException += OnUnhandledException;
+            System.Windows.Forms.Application.EnableVisualStyles();
+            ApplyTheme();
+            Wire();
+            step = "tray icon";
+            Refresh();
+            _tray.Show();
+            step = "pipe, hotkeys, config watcher";
+            _instance.StartServer(_services.Log, OnForwarded);
+            _hotkeys.Register(_services.Config.Current.Hotkeys);
+            _services.Config.StartWatching();
+            _liveTimer.Start();
+        }
+
         _services.Log.Write(Category, $"Started ({(Elevation.IsElevated ? "elevated" : "not elevated")}), mode {ModeNames.Display(_services.Switcher.State.Mode)}");
 
+        _ = RefreshAutostartAsync();
         _ = ReapplyOnStartAsync();
 
         if (openFlyout)
@@ -140,7 +153,7 @@ internal sealed class TrayController : IDisposable
     /// <summary>The power scheme survives a reboot, the GPU limit and closed apps do not: re-apply (after recovering a lost state).</summary>
     private async Task ReapplyOnStartAsync()
     {
-        await _services.RecoverLostModeAsync();
+        await Task.Run(_services.RecoverLostModeAsync);
         Refresh();
         if (_services.Switcher.NeedsReapplyOnStart)
         {
@@ -284,13 +297,18 @@ internal sealed class TrayController : IDisposable
         var options = CliOptions.FromPipeMessage(message);
         _app.Dispatcher.BeginInvoke(() =>
         {
-            if (options.Command == CliCommand.Mode && options.Mode is { } mode)
+            switch (options.Command)
             {
-                _ = SwitchAsync(mode);
-            }
-            else
-            {
-                OpenFlyout();
+                case CliCommand.Mode when options.Mode is { } mode:
+                    _ = SwitchAsync(mode);
+                    break;
+                case CliCommand.Quit:
+                    // Like the tray menu's Quit (keep mode): a running switch finishes first.
+                    _ = _queue.QuitAsync(toGrid: false);
+                    break;
+                default:
+                    OpenFlyout();
+                    break;
             }
         });
     }
@@ -322,7 +340,7 @@ internal sealed class TrayController : IDisposable
 
     private async Task RefreshAutostartAsync()
     {
-        _autostart = await _services.Autostart.IsInstalledAsync(CancellationToken.None);
+        _autostart = await Task.Run(() => _services.Autostart.IsInstalledAsync(CancellationToken.None));
         Refresh();
     }
 

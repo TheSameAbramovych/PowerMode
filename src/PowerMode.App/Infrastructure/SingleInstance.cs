@@ -15,7 +15,10 @@ internal sealed class SingleInstance : IDisposable
     /// <summary>The tray's acknowledgement line.</summary>
     private static readonly byte[] Accepted = "ok\n"u8.ToArray();
     private const string Category = "instance";
-    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(3);
+
+    /// <summary>Longest wait for each pipe step (connect, write, drain, acknowledge, a client's line).</summary>
+    private static readonly TimeSpan PipeTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan GonePoll = TimeSpan.FromMilliseconds(250);
 
     private readonly CancellationTokenSource _stop = new();
     private Mutex? _mutex;
@@ -31,8 +34,11 @@ internal sealed class SingleInstance : IDisposable
         return $"PowerMode-{identity.User!.Value}";
     }
 
-    /// <summary>True when this process is now the single instance.</summary>
-    public bool TryAcquire()
+    /// <summary>
+    /// True when this process is now the single instance. A mutex left by an instance that was killed (abandoned)
+    /// counts as free: it is taken over, and <paramref name="log"/> says so.
+    /// </summary>
+    public bool TryAcquire(ILog? log = null)
     {
         try
         {
@@ -49,7 +55,8 @@ internal sealed class SingleInstance : IDisposable
                 }
                 catch (AbandonedMutexException)
                 {
-                    // The previous instance crashed; the mutex is ours now.
+                    // The previous instance was killed while holding it; the wait gave it to us all the same.
+                    log?.Write(Category, "The previous instance ended without releasing the single-instance lock; taking it over");
                 }
             }
 
@@ -74,10 +81,33 @@ internal sealed class SingleInstance : IDisposable
         }
     }
 
+    /// <summary>Wait until no instance holds the single-instance lock (after <c>--quit</c>). False on timeout.</summary>
+    public static bool WaitUntilGone(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (true)
+        {
+            using var probe = new SingleInstance();
+            if (probe.TryAcquire())
+            {
+                probe.Release();
+                return true;
+            }
+
+            if (DateTime.UtcNow >= deadline)
+            {
+                return false;
+            }
+
+            Thread.Sleep(GonePoll);
+        }
+    }
+
     /// <summary>
     /// Send one command line to the running instance. True once the command has reached it (the write drained into the
     /// pipe); false when there is no instance or the write did not complete. The tray acknowledges after it has taken
-    /// the command and then closes its end, so the acknowledgement is awaited, but losing it is not a failure.
+    /// the command and then closes its end, so the acknowledgement is awaited, but losing it is not a failure. Every
+    /// step has a timeout: a tray that does not read can never hang the caller.
     /// </summary>
     public static async Task<bool> TryForwardAsync(string message)
     {
@@ -85,16 +115,16 @@ internal sealed class SingleInstance : IDisposable
         try
         {
             using var client = new NamedPipeClientStream(".", Id, PipeDirection.InOut, PipeOptions.Asynchronous);
-            await client.ConnectAsync((int)ConnectTimeout.TotalMilliseconds).ConfigureAwait(false);
+            await client.ConnectAsync((int)PipeTimeout.TotalMilliseconds).ConfigureAwait(false);
 
             // Raw bytes, no StreamWriter: disposing a writer flushes into a pipe the tray may already have closed.
-            await client.WriteAsync(Encoding.UTF8.GetBytes(message + "\n")).ConfigureAwait(false);
-            await client.FlushAsync().ConfigureAwait(false);
-            client.WaitForPipeDrain();
+            await client.WriteAsync(Encoding.UTF8.GetBytes(message + "\n")).AsTask().WaitAsync(PipeTimeout).ConfigureAwait(false);
+            await client.FlushAsync().WaitAsync(PipeTimeout).ConfigureAwait(false);
+            await Task.Run(client.WaitForPipeDrain).WaitAsync(PipeTimeout).ConfigureAwait(false);
             written = true;
 
             using var reader = new StreamReader(client, leaveOpen: true);
-            await reader.ReadLineAsync().WaitAsync(ConnectTimeout).ConfigureAwait(false);
+            await reader.ReadLineAsync().WaitAsync(PipeTimeout).ConfigureAwait(false);
             return true;
         }
         catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or ObjectDisposedException)
@@ -103,7 +133,11 @@ internal sealed class SingleInstance : IDisposable
         }
     }
 
-    /// <summary>Serve forwarded commands until disposed. <paramref name="onMessage"/> runs on a pool thread.</summary>
+    /// <summary>
+    /// Serve forwarded commands until disposed, on a pool thread (never the UI thread); <paramref name="onMessage"/>
+    /// runs there too. A client that connects but sends no line within the timeout is dropped, so it can never hold
+    /// the single pipe instance against the next caller.
+    /// </summary>
     public void StartServer(ILog log, Action<string> onMessage)
     {
         _ = Task.Run(async () =>
@@ -114,16 +148,22 @@ internal sealed class SingleInstance : IDisposable
                 {
                     using var server = NamedPipeServerStreamAcl.Create(Id, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, Security());
                     await server.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
+                    using var connection = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+                    connection.CancelAfter(PipeTimeout);
                     using var reader = new StreamReader(server, leaveOpen: true);
-                    var message = await reader.ReadLineAsync(_stop.Token).ConfigureAwait(false);
+                    var message = await reader.ReadLineAsync(connection.Token).ConfigureAwait(false);
                     if (message is not null)
                     {
                         // Take the command before acknowledging it: a client that is already gone must not lose it.
                         log.Write(Category, $"Forwarded: {message}");
                         onMessage(message);
-                        await server.WriteAsync(Accepted, _stop.Token).ConfigureAwait(false);
-                        await server.FlushAsync(_stop.Token).ConfigureAwait(false);
+                        await server.WriteAsync(Accepted, connection.Token).ConfigureAwait(false);
+                        await server.FlushAsync(connection.Token).ConfigureAwait(false);
                     }
+                }
+                catch (OperationCanceledException) when (!_stop.IsCancellationRequested)
+                {
+                    log.Write(Category, "A client connected but did not finish in time; dropped it");
                 }
                 catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
                 {
@@ -132,6 +172,12 @@ internal sealed class SingleInstance : IDisposable
                 catch (IOException ex)
                 {
                     log.Error(Category, "Pipe error", ex);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    // The pipe name is held by a process this user cannot open (another, elevated instance): stop serving.
+                    log.Error(Category, "Cannot serve forwarded commands", ex);
+                    return;
                 }
             }
         });

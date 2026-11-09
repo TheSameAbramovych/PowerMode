@@ -6,6 +6,9 @@ public enum CliCommand
     Tray,
     Open,
     Mode,
+
+    /// <summary>Ask the running instance to quit, keeping the current mode.</summary>
+    Quit,
     Status,
     DryRun,
     RenderStates,
@@ -22,6 +25,7 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
     public const string StatusFlag = "--status";
     public const string DryRunFlag = "--dry-run";
     public const string OpenFlag = "--open";
+    public const string QuitFlag = "--quit";
     public const string RenderStatesFlag = "--render-states";
     public const string MakeIconFlag = "--make-icon";
     public const string InstallAutostartFlag = "--install-autostart";
@@ -33,6 +37,7 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
 
           PowerMode.exe                          start the tray app
           PowerMode.exe --open                   open the flyout of the running app
+          PowerMode.exe --quit                   quit the running app (keeps the current mode)
           PowerMode.exe --mode grid|station|reserve
                                                  apply a mode (through the running app if any)
           PowerMode.exe --dry-run --mode X       print what would change, change nothing
@@ -44,7 +49,7 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
         """;
 
     /// <summary>Commands a second instance hands to the running one over the pipe.</summary>
-    public bool IsForwardable => Command is CliCommand.Tray or CliCommand.Open or CliCommand.Mode;
+    public bool IsForwardable => Command is CliCommand.Tray or CliCommand.Open or CliCommand.Mode or CliCommand.Quit;
 
     public bool IsValid => Error is null;
 
@@ -87,7 +92,7 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
                     iconFile = args[i + 1];
                     i++;
                     break;
-                case StatusFlag or DryRunFlag or OpenFlag or InstallAutostartFlag or UninstallAutostartFlag or HelpFlag or "-h" or "/?":
+                case StatusFlag or DryRunFlag or OpenFlag or QuitFlag or InstallAutostartFlag or UninstallAutostartFlag or HelpFlag or "-h" or "/?":
                     flags.Add(arg);
                     break;
                 default:
@@ -135,11 +140,21 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
             return new CliOptions(CliCommand.Mode, mode);
         }
 
+        if (flags.Contains(QuitFlag))
+        {
+            return new CliOptions(CliCommand.Quit);
+        }
+
         return new CliOptions(flags.Contains(OpenFlag) ? CliCommand.Open : CliCommand.Tray);
     }
 
     /// <summary>The single line sent over the named pipe.</summary>
-    public string ToPipeMessage() => Command == CliCommand.Mode && Mode is { } m ? $"{ModeFlag} {ModeNames.Key(m)}" : OpenFlag;
+    public string ToPipeMessage() => Command switch
+    {
+        CliCommand.Mode when Mode is { } m => $"{ModeFlag} {ModeNames.Key(m)}",
+        CliCommand.Quit => QuitFlag,
+        _ => OpenFlag,
+    };
 
     /// <summary>The console line once the command has been handed to the running instance.</summary>
     public string ForwardedText => $"Sent to the running PowerMode: {ToPipeMessage()}";

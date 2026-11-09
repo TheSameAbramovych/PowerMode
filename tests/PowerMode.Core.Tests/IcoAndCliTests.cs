@@ -57,3 +57,26 @@ public sealed class IcoWriterTests
         Assert.Contains("--make-icon", CliOptions.Usage, StringComparison.Ordinal);
     }
 }
+
+public sealed class QuitCommandTests
+{
+    [Fact]
+    public void Quit_is_forwarded_to_the_running_instance()
+    {
+        var options = CliOptions.Parse(["--quit"]);
+
+        Assert.Equal(CliCommand.Quit, options.Command);
+        Assert.True(options.IsForwardable);
+        Assert.Equal(CliOptions.QuitFlag, options.ToPipeMessage());
+        Assert.Equal("Sent to the running PowerMode: --quit", options.ForwardedText);
+        Assert.Equal(CliCommand.Quit, CliOptions.FromPipeMessage("--quit").Command);
+        Assert.Contains("--quit", CliOptions.Usage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_mode_wins_over_quit_and_help_wins_over_everything()
+    {
+        Assert.Equal(CliCommand.Mode, CliOptions.Parse(["--quit", "--mode", "grid"]).Command);
+        Assert.Equal(CliCommand.Help, CliOptions.Parse(["--quit", "--help"]).Command);
+    }
+}
