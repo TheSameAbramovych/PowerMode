@@ -362,6 +362,7 @@ public sealed class PresentationTests
             new DryRunLever(LeverKind.Brightness, LeverPlan.Of([new LeverAction("brightness 80 -> 35", _ => Task.CompletedTask)]), IsElevated: false),
             new DryRunLever(LeverKind.Docker, LeverPlan.Fail("Docker is not installed"), IsElevated: false),
             new DryRunLever(LeverKind.Efficiency, LeverPlan.None, IsElevated: false),
+            new DryRunLever(LeverKind.SecondaryDisplays, LeverPlan.Skip("One display connected"), IsElevated: false),
             new DryRunLever(LeverKind.PowerScheme, LeverPlan.Done, IsElevated: false),
         ]);
 
@@ -373,6 +374,7 @@ public sealed class PresentationTests
         Assert.Contains("  - brightness 80 -> 35" + Environment.NewLine, text, StringComparison.Ordinal);
         Assert.Contains("Docker: would fail - Docker is not installed", text, StringComparison.Ordinal);
         Assert.Contains("Efficiency mode: not used in this mode", text, StringComparison.Ordinal);
+        Assert.Contains("Secondary displays: skipped (One display connected)", text, StringComparison.Ordinal);
         Assert.Contains("Power scheme: already set", text, StringComparison.Ordinal);
     }
 }

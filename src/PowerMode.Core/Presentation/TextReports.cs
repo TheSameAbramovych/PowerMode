@@ -72,7 +72,7 @@ public static class TextReports
             }
             else if (lever.Plan.NotOwned)
             {
-                text.AppendLine(CultureInfo.InvariantCulture, $"{name}: not used in this mode");
+                text.AppendLine(CultureInfo.InvariantCulture, $"{name}: {(lever.Plan.SkipReason is { } skip ? $"skipped ({skip})" : "not used in this mode")}");
             }
             else if (lever.Plan.Actions.Count == 0)
             {

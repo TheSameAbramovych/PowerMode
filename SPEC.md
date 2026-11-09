@@ -37,6 +37,7 @@ power station, comfortable savings), **Reserve** (station nearly empty, maximum 
 |---|---|---|---|
 | Power scheme | restore baseline scheme GUID (currently AMD Ryzen Balanced) | activate scheme **"PowerMode Station"** (duplicate of Balanced `381b4222…`, fixed GUID `7d0a5e01-0000-4000-8000-00504d535441`): boost off (`PERFBOOSTMODE`=0), `PROCTHROTTLEMAX` 80, `PROCTHROTTLEMIN` 5, display off 5 min (`VIDEOIDLE` 300), sleep never (`STANDBYIDLE` 0), hibernate 30 min (`HIBERNATEIDLE` 1800) | activate **"PowerMode Reserve"** (duplicate of Power saver `a1841308…`, fixed GUID `7d0a5e02-0000-4000-8000-00504d525356`): boost off, max 50, min 5, display off 2 min, sleep never, hibernate 10 min |
 | Monitor brightness (DDC/CI, every physical monitor) | restore snapshot (80) | 35 | 10 |
+| Secondary displays (every display but the primary) | turned back on (saved topology) | on | off (primary only); skipped with one display |
 | Refresh rate (every display that offers 60 Hz at its current resolution) | restore snapshot mode (199 Hz) | 60 Hz | 60 Hz |
 | GPU power limit (NVML, **admin**) | restore default limit (120 W) | 90 W | 60 W (= min limit; always clamp to `[min_limit, max_limit]`) |
 | Wallpaper Engine | `-control play` if it was playing | `-control pause` | `-control pause` |
@@ -174,6 +175,48 @@ per mode. A first fixed row `Wallpaper Engine` offers `Keep` / `Pause` (= `pause
   now (an app PowerMode closed stays closed until the next apply). Wallpaper Engine likewise. A change for
   the other mode takes effect on its next apply. The lever table shows the new lists immediately.
 
+**Settings tabs and the Levers page** — the settings pages have the header `Settings` and two tabs, `Apps`
+and `Levers` (selected: semibold, accent underline). Levers uses the Apps page's two-column layout (Station |
+Reserve, the same choice boxes): CPU max (20–100 %, steps of 5; the live estimated CPU watts beside it),
+CPU boost, GPU limit in W (typed; clamped to the card's NVML range on save, the row shows `Watts, range
+60–132 W`; greyed with `No NVIDIA GPU detected` without NVML), brightness (Keep or 0–100 % in steps of 5),
+refresh rate (Keep or the union of rates the displays offer at their resolution from 50 Hz), other displays
+on/off, display off after and hibernate after (Never or standard minutes), Docker Desktop (Keep running /
+Stop; disabled when not installed), Wallpaper Engine (Keep / Pause; hidden when not installed). A value set in
+config.json that is not a step is listed as it is. Every change writes only the changed keys, shows
+`Saved 10:31`, and applies at once when it is for the current mode. Footer: `Windows caps the CPU by % of max
+state, not by watts; the estimate shows the result.` and **This PC**: CPU name, GPU name + limit range or
+none, monitors, Docker and Wallpaper Engine detected, rights, version.
+
+**Multiple monitors** — displays and friendly names from the CCD API (`QueryDisplayConfig`,
+`DISPLAYCONFIG_TARGET_DEVICE_NAME`; `Display N` when a monitor has no EDID name); brightness on every
+physical monitor (DDC/CI) and on a laptop panel (WMI `WmiMonitorBrightnessMethods`); refresh rate per display,
+a display without the requested rate gets its lowest offered rate from 50 Hz (logged), one display never fails
+the lever. The Monitor row: one line per monitor when there are several (`M27Q2 · 35 % · 60 Hz`,
+`T24i-30 · Off`), the live column likewise; the estimate sums the monitors that are on. Lever **Secondary
+displays** (`secondaryDisplaysOff`: Station false, Reserve true): "off" saves the active paths and modes
+(`QDC_ONLY_ACTIVE_PATHS`) in the snapshot and switches to `SDC_TOPOLOGY_INTERNAL | SDC_APPLY`; Grid (and a mode
+with them on) puts the saved configuration back (`SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG |
+SDC_SAVE_TO_DATABASE | SDC_ALLOW_CHANGES`, falling back to `SDC_TOPOLOGY_EXTEND`), only while fewer displays are
+on than saved; skipped with one display. The refresh rate is set after it, brightness after that. The flyout
+anchors to the work area of the monitor that holds the taskbar.
+
+**Shutdown and start** — `gridOnShutdown` (default true): on `SessionEnding` in Station or Reserve,
+`ShutdownBlockReasonCreate("PowerMode is restoring your power settings")`, restore Grid for the power scheme,
+display modes, brightness, GPU limit and display topology within 5 s (a running switch is waited for in the same
+budget), save `mode = grid` with the parts not restored (Docker, apps, services) still owed, then
+`ShutdownBlockReasonDestroy`. `startInGrid` (default true): a start that finds Station or Reserve saved restores
+Grid from the snapshot instead of applying the mode again; false keeps the re-apply. Both are logged.
+
+**Portability** — detected at start (registry CPU name and `~MHz`, NVML GPU name and limit range, monitors,
+offered refresh rates, Docker CLI, Wallpaper Engine path, rights, version), logged, used by the rows (`No NVIDIA
+GPU`, `Docker Desktop not installed`, Wallpaper Engine lines hidden) and the Levers page. Levers without their
+hardware or software are skipped with that reason, not failed. First start on a PC (config.json created):
+`fallbackScheme` = the scheme active then (unless PowerMode's), and the estimate's CPU part tuned from the CPU
+name: TDP guess (desktop Ryzen 65 W, Ryzen 5 X 95 W, Ryzen 7/9 X 105 W, Intel K 125 W, desktop 65 W, laptop
+U 15 / P 28 / T 35 / HS 35 / H 45 / HX 55 W, else 65 W) scales `cpuIdleW` and `cpuSpanW`, the rated clock
+sets `cpuBaseGhz`. Tray menu `Create desktop shortcut` makes the same shortcut as `install.ps1`.
+
 **Application icon** — `src/PowerMode.App/Assets/PowerMode.ico` (16–256 px): the plug glyph in the accent
 colour on a rounded dark tile; exe icon and flyout window icon. Generated by `tools/make-icon.ps1`
 (`PowerMode.exe --make-icon <file>`) and checked in.
@@ -195,7 +238,8 @@ colour on a rounded dark tile; exe icon and flyout window icon. Generated by `to
   and Docker rows ⟳), `station-failed.png` and `reserve-failed.png` (GPU + Services ⚠ "needs
   administrator", banner visible), `reserve-light.png` (light theme), `settings-apps.png` and
   `settings-apps-light.png` (the Apps settings page), `settings-apps-saved.png` (with `Saved`),
-  `hero-grid.png` (Grid, calibrated, no "vs Grid"), `hero-calibrating.png` (the calibration form), plus
+  `hero-grid.png` (Grid, calibrated, no "vs Grid"), `hero-calibrating.png` (the calibration form),
+  `settings-levers.png` and `settings-levers-light.png` (the Levers page), `station-two-monitors.png`, plus
   `tray-<mode>.png` / `tray-<mode>-light.png` and `tray-station-applying[-light].png` (16/20/24/32 px, 4×, on
   the dark / light taskbar colour) for the
   three modes. Uses fake lever data; touches nothing. Exits with an error naming any state whose content

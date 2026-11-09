@@ -15,8 +15,9 @@ exactly what was there before.
 | Lever | Grid | Station | Reserve |
 |---|---|---|---|
 | Power scheme | your scheme before the switch (by GUID) | **PowerMode Station** (copy of Balanced, `7d0a5e01-…`): boost off, max CPU 80 %, min 5 %, display off 5 min, sleep never, hibernate 30 min | **PowerMode Reserve** (copy of Power saver, `7d0a5e02-…`): boost off, max 50 %, min 5 %, display off 2 min, sleep never, hibernate 10 min |
-| Monitor brightness (DDC/CI, every monitor) | restored | 35 % | 10 % |
-| Refresh rate (each display that offers it at its resolution) | restored | 60 Hz | 60 Hz |
+| Monitor brightness (DDC/CI on every monitor; a laptop panel through WMI) | restored | 35 % | 10 % |
+| Other displays (all but the primary) | turned back on | on | **off** (Windows "primary only"); skipped with one display |
+| Refresh rate (each display; one without the rate gets its lowest rate from 50 Hz) | restored | 60 Hz | 60 Hz |
 | GPU power limit (NVML, **admin**) | restored | 90 W | 60 W (clamped to the card's min/max) |
 | Wallpaper Engine | play again if it was running | pause | pause |
 | Docker Desktop | started again, then every container that was running | stopped, unless **Keep running** is on | stopped |
@@ -53,8 +54,8 @@ How it works:
 - **Tray icon**: always in colour, so you can see that PowerMode runs and in which mode: blue plug (Grid),
   amber battery with a dot (Station), red low battery with a dot (Reserve); a small dot circles while a switch
   runs. The tooltip shows the mode and the estimated total (`≈ 142 W`), also while a switch runs. Left click opens or closes the flyout;
-  right click has the mode menu, Open, Start with Windows, Open config, Switch to Grid and quit, Quit (keep
-  mode). Windows 11 puts new tray icons into the hidden overflow; on its **first start from a folder**
+  right click has the mode menu, Open, Start with Windows, Open config, Create desktop shortcut, Switch to Grid
+  and quit, Quit (keep mode). Windows 11 puts new tray icons into the hidden overflow; on its **first start from a folder**
   PowerMode moves its own icon onto the taskbar, once (you can hide it again and it stays hidden). Where
   Windows has no such setting, a one-time balloon says to drag the icon onto the taskbar.
 - **Flyout**: mode selector (keys `1` `2` `3`), status line, one row per lever with what the mode set, the live
@@ -71,6 +72,16 @@ How it works:
   the bottom covers the rest (services, levers, hotkeys). Saving rewrites `config.json` in the app's own
   format: other keys stay as they are, comments do not survive. Each saved change shows `Saved 10:31` next
   to the title. `Esc` (or the back arrow) goes back to the lever table, which already shows the new lists.
+- **Levers settings** (the `Levers` tab next to `Apps`): per mode the CPU max state (20–100 %, with the
+  estimated CPU watts beside it: Windows caps the CPU by % of its max state, not by watts), CPU boost, the GPU
+  limit in watts (clamped to what the card accepts; greyed without an NVIDIA GPU), brightness, refresh rate,
+  other displays on/off, display off after, hibernate after, Docker Desktop and Wallpaper Engine. Saved and
+  applied like the Apps page. Below: **This PC** (CPU, GPU and its limit range, monitors, Docker, Wallpaper
+  Engine, rights, version).
+- **Several monitors**: the Monitor row has a line per monitor (`M27Q2 · 35 % · 60 Hz`,
+  `T24i-30 · Off`); brightness and refresh rate apply to each, and Reserve turns the other displays off.
+- **Shutdown and start**: shutting Windows down in Station or Reserve restores Grid's scheme, displays,
+  brightness and GPU limit first (`gridOnShutdown`), and a new start begins in Grid (`startInGrid`).
 - **Hotkeys**: `Ctrl+Alt+1` Grid, `Ctrl+Alt+2` Station, `Ctrl+Alt+3` Reserve (configurable).
 
 ### Command line
@@ -118,6 +129,30 @@ your desktop (the real Desktop folder, also when OneDrive redirects it) with the
 with Windows** is on, points the `PowerMode` task at the installed exe (one UAC prompt when that needs
 administrator rights). It does not start the app unless you pass `-Start`; config, state and logs in
 `%LOCALAPPDATA%\PowerMode` are not touched.
+
+### Sharing with friends
+
+Copy `PowerMode.exe` anywhere (it is one self-contained file), run it, and use the tray menu: **Create
+desktop shortcut** and **Start with Windows**. Nothing else is needed. On its first start on a PC, PowerMode
+takes the power scheme active then as the scheme Grid falls back to, tunes the CPU part of the estimate to that
+CPU, and adapts to what the PC has: without an NVIDIA GPU the GPU lever is skipped (`No NVIDIA GPU`), without
+Docker Desktop the Docker lever is skipped, without Wallpaper Engine its lines are hidden, a laptop's built-in
+panel is dimmed through WMI. The defaults of the close and service lists are this PC's; they only act on what
+exists, and the Apps and Levers pages change them.
+
+### Development notes
+
+- **Claude desktop sessions see other files.** The Claude desktop app is an MSIX package: every process started
+  from it (its shell, `dotnet`, `PowerMode.exe` runs) has its writes to `%LOCALAPPDATA%` redirected to
+  `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\`. So `%LOCALAPPDATA%\PowerMode` seen from
+  such a shell is a private copy (its own config, state and log), never the one of a PowerMode started from
+  Explorer; the per-user .NET SDK used for building lives only in that copy too. To read the real files, start
+  a process outside the package (`Invoke-CimMethod -ClassName Win32_Process -MethodName Create`) and let it
+  write its output somewhere outside AppData. The start-up log line names the data folder each process uses.
+- Check `Get-Process PowerMode` before `--quit`, `--open`, `--mode` or `install.ps1`: a running instance you
+  did not start is someone else's.
+- Run only `publish\PowerMode.exe` (self-contained); the framework-dependent `bin\` build needs .NET where the
+  shell cannot see it and shows an error dialog.
 
 ### Autostart
 
@@ -189,6 +224,7 @@ entry makes the file invalid (the last good config stays). Comments and trailing
 | `modes.<mode>.gpuLimitWatts` | `90` / `60` | GPU power limit, clamped to the card's range (`null` = leave) |
 | `modes.<mode>.pauseWallpaperEngine` | `true` | Pause Wallpaper Engine |
 | `modes.<mode>.stopDocker` | `true` | Stop Docker Desktop (Station's flyout toggle **Keep running** overrides it) |
+| `modes.<mode>.secondaryDisplaysOff` | `false` / `true` | Turn every display but the primary off (Station / Reserve); Grid turns them back on |
 | `modes.<mode>.closeApps` | see table above | Process names (without `.exe`) to close |
 | `modes.<mode>.efficiencyApps` | `[]` / five names | Process names to put into efficiency mode |
 | `modes.<mode>.stopServices` | `["WSearch"]` / seven names | Service names (not display names) to stop |
@@ -197,6 +233,8 @@ entry makes the file invalid (the last good config stays). Comments and trailing
 | `docker.engineWaitSeconds` | `120` | How long Grid waits for the Docker engine |
 | `wallpaperEngine.path` | Steam's `wallpaper64.exe` | Used for `-control pause\|play` (falls back to the running process) |
 | `reapplyOnDisplayChange` | `true` | Correct brightness/refresh when Windows changes display settings (at most once a minute) |
+| `gridOnShutdown` | `true` | When Windows shuts down or signs out in Station/Reserve, restore Grid's scheme, displays, brightness and GPU limit first (within 5 s); Docker, apps and services stay owed for the next start |
+| `startInGrid` | `true` | A start that finds Station or Reserve saved restores Grid instead of applying that mode again (every new start begins without limits); `false` applies the saved mode again |
 | `power.cpuIdleW` / `power.cpuSpanW` | `15` / `45` | CPU estimate: watts at idle, and the span up to all cores busy at `cpuBaseGhz` |
 | `power.cpuBaseGhz` / `power.cpuExponent` | `3.2` / `2.0` | Base clock and how steeply watts rise with the clock |
 | `power.monitorBaseW` / `power.monitorPerPercentW` | `9` / `0.30` | Monitor estimate: watts at 0 % brightness and per brightness percent |
@@ -218,7 +256,7 @@ Example — dimmer Station, keep Postman open in Reserve:
 
 ## Known limitations
 
-- **No total watts.** CPU power is not measurable without a kernel driver; use the station's display.
+- **Total watts are an estimate** (see above): CPU power is not measurable without a kernel driver; calibrate against the station's display.
 - **Wallpaper Engine's pause state cannot be read**, so "playing" means "was running" and a saving mode sends
   `pause` on every apply.
 - **Efficiency mode** is set on the processes running at apply time; a process started later (a new WebView2
