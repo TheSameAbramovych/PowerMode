@@ -55,6 +55,16 @@ How it works:
   menu, Open, Start with Windows, Open config, Switch to Grid and quit, Quit (keep mode).
 - **Flyout**: mode selector (keys `1` `2` `3`), status line, one row per lever with what the mode set, the live
   value and ✓ / ⟳ / ⚠. `Esc` closes it.
+- **Apps settings** (gear in the flyout header): one row per app with a choice for **Station** and
+  **Reserve**: `Keep`, `Efficiency` (efficiency mode, the mode's `efficiencyApps`) or `Close` (its
+  `closeApps`); plus `Wallpaper Engine`: `Keep` / `Pause`. The list holds every app in those lists, the apps
+  running now that have a window or are common background apps (Steam, Discord, Spotify, Telegram, Slack,
+  Teams, OneDrive, …; never Windows' own processes), and any process you add by name (`Add process…`,
+  without `.exe`). Apps with a setting are listed first. Each change is saved to `config.json` at once; when
+  it is for the mode you are in, it also applies at once (an app set to `Close` closes now and Grid starts
+  it again; `Keep` starts again what PowerMode closed and clears efficiency mode). `Open config.json` at
+  the bottom covers the rest (services, levers, hotkeys). Saving rewrites `config.json` in the app's own
+  format: other keys stay as they are, comments do not survive. `Esc` goes back to the lever table.
 - **Hotkeys**: `Ctrl+Alt+1` Grid, `Ctrl+Alt+2` Station, `Ctrl+Alt+3` Reserve (configurable).
 
 ### Command line
@@ -62,12 +72,14 @@ How it works:
 ```powershell
 .\PowerMode.exe                            # start the tray app (a second start opens the flyout of the first)
 .\PowerMode.exe --open                     # open the flyout of the running app
+.\PowerMode.exe --quit                     # quit the running app (keeps the mode; waits for a running switch)
 .\PowerMode.exe --mode station             # apply through the running app, or apply here and exit
 .\PowerMode.exe --dry-run --mode reserve   # print what would change, change nothing
 .\PowerMode.exe --status                   # print the lever table
 .\PowerMode.exe --render-states .\review   # render the flyout states to PNG with fake data
 .\PowerMode.exe --install-autostart        # start at logon with admin rights (asks for UAC once)
 .\PowerMode.exe --uninstall-autostart
+.\PowerMode.exe --make-icon <file.ico>     # developer tool: write the application icon
 ```
 
 `PowerMode.exe` is a Windows (GUI) program: in PowerShell its output is complete when piped
@@ -81,6 +93,25 @@ How it works:
 
 Produces `publish\PowerMode.exe` (self-contained single file, win-x64, ReadyToRun, compressed; about 72 MB). It
 uses the per-user .NET SDK in `%LOCALAPPDATA%\Microsoft\dotnet` when no `dotnet` is on PATH.
+
+The exe and the flyout use `src\PowerMode.App\Assets\PowerMode.ico` (the plug on a dark tile, 16–256 px). It
+is checked in; `tools\make-icon.ps1` regenerates it after a change to the drawing code.
+
+### Install
+
+```powershell
+.\install.ps1              # build.ps1, then install, desktop shortcut, autostart task path
+.\install.ps1 -NoBuild     # install the existing publish\PowerMode.exe
+.\install.ps1 -Start       # ... and start PowerMode afterwards
+```
+
+`install.ps1` copies the exe to `%LOCALAPPDATA%\Programs\PowerMode\PowerMode.exe` (a PowerMode running from
+there is asked to quit with `--quit` first and stopped only if it does not end; the script says so; the PC
+keeps its mode), creates or updates `PowerMode.lnk` on
+your desktop (the real Desktop folder, also when OneDrive redirects it) with the app icon, and, when **Start
+with Windows** is on, points the `PowerMode` task at the installed exe (one UAC prompt when that needs
+administrator rights). It does not start the app unless you pass `-Start`; config, state and logs in
+`%LOCALAPPDATA%\PowerMode` are not touched.
 
 ### Autostart
 
@@ -109,7 +140,7 @@ is the only honest total. PowerMode shows only what it can measure:
 
 | Path | Content |
 |---|---|
-| `%LOCALAPPDATA%\PowerMode\config.json` | settings; created with the defaults on first run, reloaded when saved; an invalid file is ignored (the last good config stays, the log says why) |
+| `%LOCALAPPDATA%\PowerMode\config.json` | settings; created with the defaults on first run, reloaded when saved; an invalid file is ignored (the last good config stays, the log says why). The Apps settings page writes the app lists here (atomically; a file that is invalid on disk is never overwritten) |
 | `%LOCALAPPDATA%\PowerMode\state.json` | current mode, since when, snapshot, per-mode options (Keep Docker), last lever results, apps closed by PowerMode, processes in efficiency mode. Written through a flushed temp file; the previous copy is kept as `state.json.bak`. A file that cannot be read is renamed to `state.json.corrupt-<time>` (never deleted) and the backup is used. If both are unusable while a PowerMode scheme is active, PowerMode takes that mode back and Grid later activates `fallbackScheme` |
 | `%LOCALAPPDATA%\PowerMode\logs\powermode-YYYYMMDD.log` | every lever action with result and duration; 14 days kept |
 
