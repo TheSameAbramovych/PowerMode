@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
@@ -146,6 +147,7 @@ internal sealed class TrayController : IDisposable
         _tray.OpenRequested += (_, _) => OpenFlyout();
         _tray.AutostartToggled += async (_, on) => await SetAutostartAsync(on);
         _tray.ConfigRequested += (_, _) => OpenConfig();
+        _tray.ShortcutRequested += (_, _) => CreateShortcut();
         _tray.QuitRequested += async (_, toGrid) => await _queue.QuitAsync(toGrid);
         _tray.LeftClicked += (_, _) => ToggleFlyout();
 
@@ -165,6 +167,22 @@ internal sealed class TrayController : IDisposable
         if (!_queue.IsSwitching && !_disposed)
         {
             await RefreshLiveAsync(sample: false);
+        }
+    }
+
+    /// <summary>Tray menu: a desktop shortcut to this exe (for a copy shared with friends; no installer needed).</summary>
+    private void CreateShortcut()
+    {
+        try
+        {
+            var path = DesktopShortcut.Create();
+            _services.Log.Write(Category, $"Desktop shortcut: {path} -> {AppPaths.ExecutablePath}");
+            _tray.Toast("PowerMode", "Shortcut created on the desktop.");
+        }
+        catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or IOException)
+        {
+            _services.Log.Error(Category, "Cannot create the desktop shortcut", ex);
+            _tray.Toast("PowerMode", "The desktop shortcut could not be created; see the log.");
         }
     }
 

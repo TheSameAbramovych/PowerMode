@@ -33,6 +33,7 @@ internal sealed class TrayIcon : IDisposable
         _autostartItem.Click += (_, _) => AutostartToggled?.Invoke(this, !_autostartItem.Checked);
         _menu.Items.Add(_autostartItem);
         _menu.Items.Add("Open config", null, (_, _) => ConfigRequested?.Invoke(this, EventArgs.Empty));
+        _menu.Items.Add("Create desktop shortcut", null, (_, _) => ShortcutRequested?.Invoke(this, EventArgs.Empty));
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add("Switch to Grid and quit", null, (_, _) => QuitRequested?.Invoke(this, true));
         _menu.Items.Add("Quit (keep mode)", null, (_, _) => QuitRequested?.Invoke(this, false));
@@ -54,6 +55,8 @@ internal sealed class TrayIcon : IDisposable
     public event EventHandler<bool>? AutostartToggled;
 
     public event EventHandler? ConfigRequested;
+
+    public event EventHandler? ShortcutRequested;
 
     /// <summary>True = switch to Grid first.</summary>
     public event EventHandler<bool>? QuitRequested;
