@@ -59,7 +59,10 @@ internal sealed class ProcessLever : ILever
         return Task.CompletedTask;
     }
 
-    /// <summary>The process to relaunch: the oldest one that is not a Chromium/Electron child (<c>--type=</c>).</summary>
+    /// <summary>
+    /// The process to relaunch: the oldest one that is not a Chromium/Electron child (<c>--type=</c>). A packaged app
+    /// records its AUMID; a Squirrel app records its stable stub instead of the versioned <c>app-x.y.z</c> exe.
+    /// </summary>
     private static CapturedProcess? MainProcess(Process[] processes)
     {
         var candidates = processes
@@ -68,9 +71,17 @@ internal sealed class ProcessLever : ILever
             .OrderBy(c => c.CommandLine.Contains(ChildProcessMarker, StringComparison.OrdinalIgnoreCase))
             .ThenBy(c => c.Start ?? DateTimeOffset.MaxValue)
             .ToList();
-        return candidates.Count == 0
-            ? null
-            : new CapturedProcess(candidates[0].Process.ProcessName, candidates[0].Path!, ProcessInfo.ArgumentsOf(candidates[0].CommandLine));
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        var main = candidates[0];
+        return new CapturedProcess(
+            main.Process.ProcessName,
+            Relaunch.StablePath(main.Path!, File.Exists),
+            ProcessInfo.ArgumentsOf(main.CommandLine),
+            ProcessInfo.TryGetAppUserModelId(main.Process.Id));
     }
 
     public Task<LeverPlan> PlanAsync(ApplyContext context, CancellationToken cancellationToken)
@@ -104,11 +115,15 @@ internal sealed class ProcessLever : ILever
         {
             if (Count(app.Name) == 0)
             {
-                var arguments = _config().RelaunchArgumentsFor(app.Name) ?? app.Arguments;
-                actions.Add(new LeverAction($"Relaunch {FriendlyNames.Process(app.Name)} {arguments}".TrimEnd(), async _ =>
+                var launch = Relaunch.For(app, _config().RelaunchArgumentsFor(app.Name) ?? app.Arguments);
+                var description = launch.ArgumentsDropped
+                    ? $"Relaunch {FriendlyNames.Process(app.Name)} (packaged app: its relaunch arguments cannot be passed and are ignored)"
+                    : $"Relaunch {FriendlyNames.Process(app.Name)} {launch.Arguments}".TrimEnd();
+                actions.Add(new LeverAction(description, _ =>
                 {
-                    await Relaunch(app, arguments).ConfigureAwait(false);
+                    StartAgain(app, launch);
                     closed.RemoveAll(n => string.Equals(n, app.Name, StringComparison.OrdinalIgnoreCase));
+                    return Task.CompletedTask;
                 }));
             }
         }
@@ -145,6 +160,16 @@ internal sealed class ProcessLever : ILever
                 {
                     denied++;
                 }
+                catch (AggregateException ex)
+                {
+                    // Kill(entireProcessTree: true) collects the failures of the root and its descendants into one exception.
+                    if (ex.Flatten().InnerExceptions.Any(Elevation.IsAccessDenied))
+                    {
+                        denied++;
+                    }
+
+                    // Any other failure: go on; the exit check after KillWait reports "did not exit".
+                }
                 catch (InvalidOperationException)
                 {
                     // Exited meanwhile.
@@ -168,15 +193,15 @@ internal sealed class ProcessLever : ILever
         }
     }
 
-    private Task Relaunch(CapturedProcess app, string arguments)
+    /// <summary>A packaged app through the shell (no path check: the package folder changes with every update); any other app by its path.</summary>
+    private void StartAgain(CapturedProcess app, LaunchTarget launch)
     {
-        if (!File.Exists(app.Path))
+        if (!launch.IsPackaged && !File.Exists(launch.File))
         {
-            throw new LeverException($"{FriendlyNames.Process(app.Name)}: {app.Path} not found");
+            throw new LeverException($"{FriendlyNames.Process(app.Name)}: {launch.File} not found");
         }
 
-        _launcher.Launch(app.Path, arguments, hidden: false);
-        return Task.CompletedTask;
+        _launcher.Launch(launch.File, launch.Arguments, hidden: false, launch.WorkingDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
     }
 
     private static async Task WaitAsync(Process process, TimeSpan timeout, CancellationToken cancellationToken)

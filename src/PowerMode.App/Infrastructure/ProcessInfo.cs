@@ -27,6 +27,25 @@ internal static class ProcessInfo
         return Kernel32.QueryFullProcessImageName(handle, 0, buffer, ref size) ? new string(buffer, 0, size) : null;
     }
 
+    /// <summary>
+    /// The AppUserModelID of a packaged (MSIX) process, e.g. <c>OpenAI.Codex_2p2nqsd0c76g0!App</c>; null for an
+    /// unpackaged process (APPMODEL_ERROR_NO_APPLICATION) or when it cannot be read.
+    /// </summary>
+    public static string? TryGetAppUserModelId(int processId)
+    {
+        using var handle = Open(processId, Kernel32.ProcessQueryLimitedInformation);
+        if (handle.IsInvalid)
+        {
+            return null;
+        }
+
+        var buffer = new char[Kernel32.AppUserModelIdMaxLength];
+        var length = (uint)buffer.Length;
+        return Kernel32.GetApplicationUserModelId(handle, ref length, buffer) == Kernel32.ErrorSuccess && length > 1
+            ? new string(buffer, 0, (int)length).TrimEnd('\0')
+            : null;
+    }
+
     public static string? TryGetCommandLine(int processId)
     {
         using var handle = Open(processId, Kernel32.ProcessQueryLimitedInformation);

@@ -181,6 +181,16 @@ internal static class Kernel32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool QueryFullProcessImageName(Microsoft.Win32.SafeHandles.SafeProcessHandle process, uint flags, [Out] char[] name, ref int size);
 
+    /// <summary>APPLICATION_USER_MODEL_ID_MAX_LENGTH, including the terminating null.</summary>
+    public const int AppUserModelIdMaxLength = 130;
+
+    /// <summary>GetApplicationUserModelId returns this for a packaged process; APPMODEL_ERROR_NO_APPLICATION (15703) means unpackaged.</summary>
+    public const int ErrorSuccess = 0;
+
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetApplicationUserModelId(Microsoft.Win32.SafeHandles.SafeProcessHandle process, ref uint length, [Out] char[] applicationUserModelId);
+
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetProcessInformation(Microsoft.Win32.SafeHandles.SafeProcessHandle process, int informationClass, ref PowerThrottlingState information, int size);
