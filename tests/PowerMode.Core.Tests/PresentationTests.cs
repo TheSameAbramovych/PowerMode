@@ -231,7 +231,30 @@ public sealed class PresentationTests
 
         config.Modes.Station.RefreshRateHz = null;
         Assert.Equal(["Unchanged"], FlyoutStateBuilder.Describe(LeverRow.Monitor, TargetPlanner.Plan(PowerModeKind.Station, config, null)));
-        Assert.Equal(["Kept running"], FlyoutStateBuilder.Describe(LeverRow.Docker, TargetPlanner.Plan(PowerModeKind.Station, config, RenderFixtures.Baseline())));
+        Assert.Equal(["Kept running (config)"], FlyoutStateBuilder.Describe(LeverRow.Docker, TargetPlanner.Plan(PowerModeKind.Station, config, RenderFixtures.Baseline())));
+    }
+
+    [Fact]
+    public void Docker_toggle_shows_only_when_the_config_stops_docker()
+    {
+        var kept = TargetPlanner.Plan(PowerModeKind.Station, Config, RenderFixtures.Baseline(), new State.ModeOptions { KeepDocker = true });
+        var keptRow = Row(FlyoutStateBuilder.Build(new FlyoutInput(kept, new Dictionary<LeverKind, LeverResult>(), new HashSet<LeverKind>(), LiveValues.Empty, null, Now, true, true, false, Config.Hotkeys)), LeverRow.Docker);
+        Assert.Equal(["Kept running"], keptRow.Lines);
+        Assert.True(keptRow.ShowKeepDocker);
+        Assert.True(keptRow.KeepDocker);
+
+        var config = AppConfig.CreateDefault();
+        config.Modes.Station.StopDocker = false;
+        var byConfig = TargetPlanner.Plan(PowerModeKind.Station, config, RenderFixtures.Baseline());
+        var state = FlyoutStateBuilder.Build(new FlyoutInput(byConfig, new Dictionary<LeverKind, LeverResult>(), new HashSet<LeverKind>(), LiveValues.Empty, null, Now, true, false, false, config.Hotkeys));
+        Assert.Equal(["Kept running (config)"], Row(state, LeverRow.Docker).Lines);
+        Assert.False(Row(state, LeverRow.Docker).ShowKeepDocker);
+        Assert.DoesNotContain("Keep running", TextReports.Status(state), StringComparison.Ordinal);
+
+        // No baseline yet: Docker is left alone, still no toggle.
+        var bare = TargetPlanner.Plan(PowerModeKind.Station, config, null);
+        Assert.Equal(["Unchanged"], FlyoutStateBuilder.Describe(LeverRow.Docker, bare));
+        Assert.False(bare.DockerStopConfigured);
     }
 
     [Theory]

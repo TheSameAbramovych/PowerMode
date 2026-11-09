@@ -76,6 +76,7 @@ public static class TargetPlanner
             Docker = stopDocker
                 ? new DockerTarget(false, [], snapshot?.Docker?.RunningContainers.Count ?? 0)
                 : snapshot is null ? null : RestoreDocker(config, snapshot),
+            DockerStopConfigured = m.StopDocker,
             Apps = new AppsTarget(
                 m.CloseApps,
                 snapshot is null ? [] : [.. snapshot.Processes.Where(p => !Contains(m.CloseApps, p.Name))]),

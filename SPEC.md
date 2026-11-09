@@ -103,7 +103,8 @@ shown by tray left click, hotkey, or `PowerMode.exe --open`. Layout top→bottom
    already set, or not used in this mode; no glyph when the row has no result yet), ⟳ spinning while
    applying, ⚠ (amber) failed with the reason as tooltip **and** as a second line in the row (the owner
    judges by look — the reason must be visible). Rows 40 px min, 1 px dividers, no hover-only controls.
-   The Docker row carries one toggle on the right (`Keep running` switch), visible only in Station.
+   The Docker row carries one toggle on the right (`Keep running` switch), visible only in Station and
+   only when the config stops Docker there; with `stopDocker: false` the row says `Kept running (config)`.
 5. Footer: `Ctrl+Alt+1 · 2 · 3 switch modes` (muted) · right: `Start with Windows` toggle.
 6. When not elevated and a lever needed it: a one-line banner under the status line:
    `GPU limit and services need administrator rights.` with a `Restart as administrator` button

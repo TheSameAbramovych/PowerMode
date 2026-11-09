@@ -64,6 +64,9 @@ public sealed record TargetState
 
     public DockerTarget? Docker { get; init; }
 
+    /// <summary>The mode's config stops Docker, so "Keep Docker running" is a choice; otherwise Docker runs by config.</summary>
+    public bool DockerStopConfigured { get; init; }
+
     public AppsTarget Apps { get; init; } = AppsTarget.Empty;
 
     public EfficiencyTarget Efficiency { get; init; } = EfficiencyTarget.ClearAll;

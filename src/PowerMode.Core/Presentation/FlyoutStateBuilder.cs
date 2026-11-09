@@ -148,7 +148,8 @@ public static class FlyoutStateBuilder
             }
         }
 
-        var showToggle = row == LeverRow.Docker && input.Target.Mode == PowerModeKind.Station;
+        // Only a choice when the config would stop Docker; otherwise the row says it runs by config.
+        var showToggle = row == LeverRow.Docker && input.Target.Mode == PowerModeKind.Station && input.Target.DockerStopConfigured;
         return new RowState(row, LeverRows.Title(row), Describe(row, input.Target), Live(row, input.Live, input.Target), glyph, reason, showToggle, input.KeepDocker);
     }
 
@@ -196,7 +197,7 @@ public static class FlyoutStateBuilder
             case LeverRow.Display:
                 return [target.Scheme?.Configure is { } scheme ? TimeoutFact(scheme) : Unchanged];
             case LeverRow.Docker:
-                return [DockerFact(target.Docker)];
+                return [DockerFact(target)];
             case LeverRow.Apps:
                 var apps = new List<string>();
                 if (target.Apps.Close.Count > 0)
@@ -248,12 +249,12 @@ public static class FlyoutStateBuilder
         };
     }
 
-    private static string DockerFact(DockerTarget? docker) => docker switch
+    private static string DockerFact(TargetState target) => target.Docker switch
     {
         null => Unchanged,
         { Running: false, SnapshotContainerCount: > 0 } d => $"Stopped{Dot}was {Count(d.SnapshotContainerCount, "container")}",
         { Running: false } => "Stopped",
-        { Running: true } => "Kept running",
+        { Running: true } => target.DockerStopConfigured ? "Kept running" : "Kept running (config)",
     };
 
     private static string? Live(LeverRow row, LiveValues live, TargetState target) => row switch
