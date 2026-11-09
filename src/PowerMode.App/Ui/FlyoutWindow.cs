@@ -37,6 +37,16 @@ internal sealed class FlyoutWindow : Window
         SourceInitialized += (_, _) =>
         {
             _handle = new WindowInteropHelper(this).Handle;
+
+            // Software rendering: PowerMode itself changes the display mode (200 Hz <-> 60 Hz). A Direct3D render
+            // target first created after such a change presented nothing at all (layout and UI tree complete, only
+            // the window background on screen). The flyout is small and static; GDI presentation does not depend on
+            // the Direct3D device surviving the mode change.
+            if (HwndSource.FromHwnd(_handle)?.CompositionTarget is { } target)
+            {
+                target.RenderMode = RenderMode.SoftwareOnly;
+            }
+
             ApplyFrame();
         };
         SizeChanged += (_, _) => Reposition();
@@ -53,6 +63,10 @@ internal sealed class FlyoutWindow : Window
     public void ShowFlyout()
     {
         Show();
+
+        // Safeguard: lay out and paint the content now, so a shown flyout is never left with only its background.
+        UpdateLayout();
+        View.InvalidateVisual();
         Reposition();
         Activate();
         User32.SetForegroundWindow(_handle);
