@@ -9,6 +9,7 @@ using PowerMode.App.Ui;
 using PowerMode.Core;
 using PowerMode.Core.Cli;
 using PowerMode.Core.Levers;
+using PowerMode.Core.Logging;
 using PowerMode.Core.Planning;
 using PowerMode.Core.Presentation;
 using PowerMode.Core.Switching;
@@ -39,12 +40,10 @@ internal sealed class TrayController : IDisposable
     private readonly DispatcherTimer _spinnerTimer;
     private readonly DispatcherTimer _displayDebounce;
     private SingleInstance _instance;
+    private readonly SwitchScheduler _queue;
     private SwitchInProgress? _progress;
-    private PowerModeKind? _pending;
-    private bool _switching;
     private bool _readingLive;
     private bool _disposed;
-    private bool _quitAfterSwitch;
     private bool _autostart;
     private int _spinnerFrame;
     private LiveValues _live = LiveValues.Empty;
@@ -56,6 +55,7 @@ internal sealed class TrayController : IDisposable
         _instance = instance;
         _arguments = arguments;
         _hotkeys = new HotkeyManager(services.Log);
+        _queue = new SwitchScheduler(RunSwitchAsync, Shutdown, RestartElevated, services.Log);
         var view = new FlyoutView { DataContext = _model };
         _flyout = new FlyoutWindow(view, () => _services.Config.Current.Flyout);
         _liveTimer = new DispatcherTimer(TooltipRefresh, DispatcherPriority.Background, async (_, _) => await RefreshLiveAsync(), _app.Dispatcher);
@@ -66,6 +66,7 @@ internal sealed class TrayController : IDisposable
     public void Start(bool openFlyout)
     {
         System.Windows.Forms.Application.EnableVisualStyles();
+        _app.DispatcherUnhandledException += OnUnhandledException;
         ApplyTheme();
         Wire();
         _hotkeys.Register(_services.Config.Current.Hotkeys);
@@ -85,34 +86,31 @@ internal sealed class TrayController : IDisposable
         }
     }
 
-    /// <summary>The power scheme survives a reboot, the GPU limit and closed apps do not: re-apply (after recovering a lost state).</summary>
-    private async Task ReapplyOnStartAsync()
-    {
-        await _services.RecoverLostModeAsync();
-        Refresh();
-        if (_services.Switcher.NeedsReapplyOnStart)
-        {
-            await SwitchAsync(_services.Switcher.State.Mode);
-        }
-    }
-
     private void Wire()
     {
         var view = _flyout.View;
         view.ModeRequested += (_, mode) => _ = SwitchAsync(mode);
         view.CloseRequested += (_, _) => _flyout.HideFlyout();
         view.ConfigRequested += (_, _) => OpenConfig();
-        view.RestartElevatedRequested += (_, _) => RestartElevated();
+        view.RestartElevatedRequested += (_, _) => _queue.RestartElevated();
         view.KeepDockerChanged += async (_, keep) => await SetKeepDockerAsync(keep);
         view.StartWithWindowsChanged += async (_, on) => await SetAutostartAsync(on);
-        _flyout.ModeKey += (_, mode) => _ = SwitchAsync(mode);
+
+        // Keys 1/2/3 act like the segments, which are disabled while a switch runs.
+        _flyout.ModeKey += (_, mode) =>
+        {
+            if (!_queue.IsSwitching)
+            {
+                _ = SwitchAsync(mode);
+            }
+        };
         _flyout.IsVisibleChanged += (_, _) => OnFlyoutVisibilityChanged();
 
         _tray.ModeRequested += (_, mode) => _ = SwitchAsync(mode);
         _tray.OpenRequested += (_, _) => OpenFlyout();
         _tray.AutostartToggled += async (_, on) => await SetAutostartAsync(on);
         _tray.ConfigRequested += (_, _) => OpenConfig();
-        _tray.QuitRequested += async (_, toGrid) => await QuitAsync(toGrid);
+        _tray.QuitRequested += async (_, toGrid) => await _queue.QuitAsync(toGrid);
         _tray.LeftClicked += (_, _) => ToggleFlyout();
 
         _hotkeys.Pressed += (_, mode) => _ = SwitchAsync(mode);
@@ -124,43 +122,59 @@ internal sealed class TrayController : IDisposable
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
     }
 
-    /// <summary>Apply a mode. While a switch runs, the latest request waits and runs next.</summary>
+    /// <summary>Apply a mode. While a switch runs, the latest request waits and runs next (see <see cref="SwitchScheduler"/>).</summary>
     public async Task SwitchAsync(PowerModeKind mode)
     {
-        if (_switching)
+        await _queue.RequestAsync(mode);
+        if (!_queue.IsSwitching && !_disposed)
         {
-            _pending = mode;
-            return;
+            await RefreshLiveAsync();
         }
+    }
 
-        _switching = true;
+    /// <summary>The power scheme survives a reboot, the GPU limit and closed apps do not: re-apply (after recovering a lost state).</summary>
+    private async Task ReapplyOnStartAsync()
+    {
+        await _services.RecoverLostModeAsync();
+        Refresh();
+        if (_services.Switcher.NeedsReapplyOnStart)
+        {
+            await SwitchAsync(_services.Switcher.State.Mode);
+        }
+    }
+
+    /// <summary>One switch of the queue. Never throws: a failure is logged and the queue goes on.</summary>
+    private async Task RunSwitchAsync(PowerModeKind mode)
+    {
+        // Show the switch at once: capturing the baseline (Docker, DDC/CI, powercfg) takes seconds before the switcher reports Started.
+        _progress = new SwitchInProgress(mode, _services.Switcher.Levers.Select(l => l.Kind).ToHashSet());
+        _spinnerTimer.Start();
+        Refresh();
         try
         {
-            PowerModeKind? next = mode;
-            while (next is { } current)
-            {
-                _pending = null;
-                var outcome = await Task.Run(() => _services.Switcher.SwitchAsync(current));
-                var target = TargetPlanner.Plan(current, _services.Config.Current, _services.Switcher.State.Snapshot, _services.Switcher.State.OptionsFor(current));
-                var (title, text) = FlyoutStateBuilder.Toast(target, outcome.Results);
-                _tray.Toast(title, text);
-                next = _pending;
-            }
+            var outcome = await Task.Run(() => _services.Switcher.SwitchAsync(mode));
+            var target = TargetPlanner.Plan(mode, _services.Config.Current, _services.Switcher.State.Snapshot, _services.Switcher.State.OptionsFor(mode));
+            var (title, text) = FlyoutStateBuilder.Toast(target, outcome.Results);
+            _tray.Toast(title, text);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _services.Log.Error(Category, $"Switch to {ModeNames.Display(mode)} failed", ex);
         }
         finally
         {
-            _switching = false;
+            _progress = null;
+            _spinnerTimer.Stop();
             _services.Live.Invalidate();
             Refresh();
         }
+    }
 
-        if (_quitAfterSwitch)
-        {
-            Shutdown();
-            return;
-        }
-
-        await RefreshLiveAsync();
+    private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        // An async UI handler must not take the tray down and leave the PC reduced without it.
+        _services.Log.Error(Category, "Unhandled exception on the UI thread", e.Exception);
+        e.Handled = true;
     }
 
     private void OnProgress(SwitchProgress progress)
@@ -193,7 +207,7 @@ internal sealed class TrayController : IDisposable
             ? $"PowerMode{FlyoutStateBuilder.Dot}Applying {ModeNames.Display(mode)}…"
             : $"PowerMode{FlyoutStateBuilder.Dot}{ModeNames.Display(mode)}"
               + (_live.GpuWatts is { } watts ? string.Create(CultureInfo.InvariantCulture, $"{FlyoutStateBuilder.Dot}GPU {watts:0} W") : string.Empty);
-        _tray.Update(mode, _switching || _progress is not null, _progress is null ? null : _spinnerFrame, _autostart, tooltip);
+        _tray.Update(mode, _queue.IsSwitching || _progress is not null, _progress is null ? null : _spinnerFrame, _autostart, tooltip);
     }
 
     private void AdvanceSpinner()
@@ -213,7 +227,7 @@ internal sealed class TrayController : IDisposable
         try
         {
             _live = _flyout.IsVisible
-                ? await Task.Run(() => _services.Live.ReadAsync(includeSlow: !_switching, CancellationToken.None))
+                ? await Task.Run(() => _services.Live.ReadAsync(includeSlow: !_queue.IsSwitching, CancellationToken.None))
                 : _live with { GpuWatts = await Task.Run(_services.Live.GpuWatts) };
             Refresh();
         }
@@ -329,26 +343,14 @@ internal sealed class TrayController : IDisposable
         }
     }
 
-    /// <summary>Quit, optionally switching to Grid first. A running switch is finished first so state.json stays consistent.</summary>
-    private async Task QuitAsync(bool toGrid)
+    /// <summary>Called once by the queue; guarded anyway so a second path can never shut down twice.</summary>
+    private void Shutdown()
     {
-        if (_switching)
+        if (_disposed)
         {
-            _pending = toGrid ? PowerModeKind.Grid : null;
-            _quitAfterSwitch = true;
             return;
         }
 
-        if (toGrid)
-        {
-            await SwitchAsync(PowerModeKind.Grid);
-        }
-
-        Shutdown();
-    }
-
-    private void Shutdown()
-    {
         Dispose();
         _app.Shutdown();
     }
@@ -391,7 +393,7 @@ internal sealed class TrayController : IDisposable
     private async Task OnDisplaySettledAsync()
     {
         _displayDebounce.Stop();
-        if (_switching || _services.Switcher.State.Mode == PowerModeKind.Grid || !_services.Config.Current.ReapplyOnDisplayChange)
+        if (_queue.IsSwitching || _services.Switcher.State.Mode == PowerModeKind.Grid || !_services.Config.Current.ReapplyOnDisplayChange)
         {
             return;
         }
