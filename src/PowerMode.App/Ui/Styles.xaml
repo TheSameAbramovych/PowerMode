@@ -15,6 +15,9 @@
     <!-- Apps settings page: width of the Station and Reserve columns (8 px gap + choice box), and the most the app list
          may take before it scrolls (8 rows), so the page stays within the 600 px flyout. -->
     <GridLength x:Key="PmChoiceColumn">112</GridLength>
+    <!-- The Apps page's choices are shorter (Keep, Efficiency, Close): 4 px narrower, so process names like
+         PhoneExperienceHost.exe fit on one line. -->
+    <GridLength x:Key="PmAppChoiceColumn">108</GridLength>
     <sys:Double x:Key="PmAppListHeight">352</sys:Double>
 
     <!-- 32x32 header icon button (gear, close). Always visible; hover only changes the fill. -->

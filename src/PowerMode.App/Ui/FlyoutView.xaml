@@ -150,7 +150,11 @@
                                             <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{DynamicResource PmSeriesOther}" VerticalAlignment="Center" Margin="0,1,5,0" />
                                             <TextBlock Text="{Binding Name}" FontSize="12" />
                                         </StackPanel>
-                                        <TextBlock Text="{Binding ValueText}" FontSize="13" Typography.NumeralAlignment="Tabular" Margin="13,1,0,0" />
+                                        <!-- A fixed slot for "≈" (empty for the measured GPU), so the numbers of all four line up. -->
+                                        <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
+                                            <TextBlock Text="{Binding ApproxMark}" FontSize="13" Width="13" Foreground="{DynamicResource PmMuted}" />
+                                            <TextBlock Text="{Binding AmountText}" FontSize="13" Typography.NumeralAlignment="Tabular" />
+                                        </StackPanel>
                                     </StackPanel>
                                     <DataTemplate.Triggers>
                                         <DataTrigger Binding="{Binding Name}" Value="CPU">
@@ -291,6 +295,8 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid Grid.Row="0" Margin="0,0,0,2">
                 <StackPanel Orientation="Horizontal">
@@ -320,65 +326,67 @@
                         <Grid Margin="0,0,4,4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
-                                <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                                <ColumnDefinition Width="{StaticResource PmAppChoiceColumn}" />
+                                <ColumnDefinition Width="{StaticResource PmAppChoiceColumn}" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="App" FontSize="12" Foreground="{DynamicResource PmMuted}" />
                             <TextBlock Grid.Column="1" Text="Station" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="8,0,0,0" />
                             <TextBlock Grid.Column="2" Text="Reserve" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="8,0,0,0" />
                         </Grid>
 
-                        <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,1,0,0" Margin="0,0,4,0"
-                                    Visibility="{Binding Settings.WallpaperEngineInstalled, Converter={StaticResource BoolToVisibility}}">
-                            <Grid MinHeight="44">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
-                                    <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Wallpaper Engine" FontSize="13" TextWrapping="Wrap" />
-                                    <TextBlock Text="wallpaper64.exe" FontSize="11" Foreground="{DynamicResource PmMuted}" />
-                                </StackPanel>
-                                <ComboBox Grid.Column="1" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
-                                          SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="Wallpaper Engine in Station"
-                                          ItemsSource="{x:Static ui:SettingsViewModel.WallpaperChoices}" SelectedValue="{Binding Settings.PauseWallpaperStation}" />
-                                <ComboBox Grid.Column="2" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
-                                          SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="Wallpaper Engine in Reserve"
-                                          ItemsSource="{x:Static ui:SettingsViewModel.WallpaperChoices}" SelectedValue="{Binding Settings.PauseWallpaperReserve}" />
-                            </Grid>
-                        </Border>
-
-                        <!-- Dividers open and close the list, also when Wallpaper Engine is hidden or its last visible row is cut by scrolling. -->
+                        <!-- Dividers open and close the list (Wallpaper Engine first, inside it), also when its last visible row is cut by scrolling. -->
                         <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,1,0,1" Margin="0,0,4,0">
                             <ScrollViewer MaxHeight="{StaticResource PmAppListHeight}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                           Focusable="False" Margin="0,0,-12,0">
                                 <!-- The scroll bar sits in the 12 px to the right of the columns, never over a choice box. -->
-                                <ItemsControl ItemsSource="{Binding Settings.Rows}" Focusable="False" Margin="0,0,12,0">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type ui:AppRowViewModel}">
-                                            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" MinHeight="44" Padding="0,3">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
-                                                        <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <StackPanel VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding DisplayName}" FontSize="13" TextWrapping="Wrap" LineHeight="16" LineStackingStrategy="BlockLineHeight" />
-                                                        <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="{DynamicResource PmMuted}" TextWrapping="Wrap" LineHeight="14" LineStackingStrategy="BlockLineHeight" />
-                                                    </StackPanel>
-                                                    <ComboBox Grid.Column="1" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
-                                                              SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="{Binding DisplayName, StringFormat={}{0} in Station}"
-                                                              ItemsSource="{x:Static ui:SettingsViewModel.AppChoices}" SelectedValue="{Binding Station}" />
-                                                    <ComboBox Grid.Column="2" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
-                                                              SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="{Binding DisplayName, StringFormat={}{0} in Reserve}"
-                                                              ItemsSource="{x:Static ui:SettingsViewModel.AppChoices}" SelectedValue="{Binding Reserve}" />
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <StackPanel Margin="0,0,12,0">
+                                    <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1"
+                                                Visibility="{Binding Settings.WallpaperEngineInstalled, Converter={StaticResource BoolToVisibility}}">
+                                        <Grid MinHeight="44">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="{StaticResource PmAppChoiceColumn}" />
+                                                <ColumnDefinition Width="{StaticResource PmAppChoiceColumn}" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="Wallpaper Engine" FontSize="13" TextWrapping="Wrap" />
+                                                <TextBlock Text="wallpaper64.exe" FontSize="11" Foreground="{DynamicResource PmMuted}" />
+                                            </StackPanel>
+                                            <ComboBox Grid.Column="1" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                                      SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="Wallpaper Engine in Station"
+                                                      ItemsSource="{x:Static ui:SettingsViewModel.WallpaperChoices}" SelectedValue="{Binding Settings.PauseWallpaperStation}" />
+                                            <ComboBox Grid.Column="2" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                                      SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="Wallpaper Engine in Reserve"
+                                                      ItemsSource="{x:Static ui:SettingsViewModel.WallpaperChoices}" SelectedValue="{Binding Settings.PauseWallpaperReserve}" />
+                                        </Grid>
+                                    </Border>
+
+                                    <ItemsControl ItemsSource="{Binding Settings.Rows}" Focusable="False">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type ui:AppRowViewModel}">
+                                                <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" MinHeight="44" Padding="0,3">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="{StaticResource PmAppChoiceColumn}" />
+                                                            <ColumnDefinition Width="{StaticResource PmAppChoiceColumn}" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding DisplayName}" FontSize="13" TextWrapping="WrapWithOverflow" TextTrimming="CharacterEllipsis" LineHeight="16" LineStackingStrategy="BlockLineHeight" />
+                                                            <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="{DynamicResource PmMuted}" TextWrapping="WrapWithOverflow" TextTrimming="CharacterEllipsis" LineHeight="14" LineStackingStrategy="BlockLineHeight" />
+                                                        </StackPanel>
+                                                        <ComboBox Grid.Column="1" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                                                  SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="{Binding DisplayName, StringFormat={}{0} in Station}"
+                                                                  ItemsSource="{x:Static ui:SettingsViewModel.AppChoices}" SelectedValue="{Binding Station}" />
+                                                        <ComboBox Grid.Column="2" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                                                  SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="{Binding DisplayName, StringFormat={}{0} in Reserve}"
+                                                                  ItemsSource="{x:Static ui:SettingsViewModel.AppChoices}" SelectedValue="{Binding Reserve}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
                             </ScrollViewer>
                         </Border>
 
@@ -480,20 +488,21 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </StackPanel>
-
-                    <TextBlock Text="{Binding Settings.Message}" FontSize="12" Foreground="{DynamicResource PmWarning}" TextWrapping="Wrap" Margin="0,4,4,0"
-                               Visibility="{Binding Settings.Message, Converter={StaticResource NullToCollapsed}}" />
-
-                    <Grid Margin="0,10,4,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Services, hotkeys and the rest" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Style="{StaticResource PmLinkButton}" Content="Open config.json" Click="OnConfig" />
-                    </Grid>
                 </StackPanel>
             </ScrollViewer>
+
+            <!-- Pinned under the page: a problem with the last change, and the way to everything else. -->
+            <TextBlock Grid.Row="3" Text="{Binding Settings.Message}" FontSize="12" Foreground="{DynamicResource PmWarning}" TextWrapping="Wrap" Margin="0,4,4,0"
+                       Visibility="{Binding Settings.Message, Converter={StaticResource NullToCollapsed}}" />
+
+            <Grid Grid.Row="4" Margin="0,10,4,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Services, hotkeys and the rest" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Style="{StaticResource PmLinkButton}" Content="Open config.json" Click="OnConfig" />
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>
