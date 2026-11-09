@@ -8,7 +8,40 @@ namespace PowerMode.Core.Model;
 public sealed record MonitorLevel(string Id, int Brightness, int? Contrast = null);
 
 /// <summary>Display mode of one display device (e.g. <c>\\.\DISPLAY1</c>).</summary>
-public sealed record DisplayModeInfo(string Device, int Width, int Height, int RefreshHz, int BitsPerPixel);
+public sealed record DisplayModeInfo(string Device, int Width, int Height, int RefreshHz, int BitsPerPixel)
+{
+    /// <summary>Same device, resolution and colour depth, refresh rate within <see cref="RefreshRates.Tolerance"/>.</summary>
+    public bool Matches(DisplayModeInfo other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        return string.Equals(Device, other.Device, StringComparison.OrdinalIgnoreCase)
+            && Width == other.Width && Height == other.Height && BitsPerPixel == other.BitsPerPixel
+            && RefreshRates.Same(RefreshHz, other.RefreshHz);
+    }
+}
+
+/// <summary>
+/// Windows reports a fractional rate rounded down: a 60 Hz mode (59.94 Hz) reads back as 59 Hz after it was set.
+/// Rates within one hertz are the same rate.
+/// </summary>
+public static class RefreshRates
+{
+    public const int Tolerance = 1;
+
+    public static bool Same(int a, int b) => Math.Abs(a - b) <= Tolerance;
+
+    /// <summary>The offered rate for <paramref name="wanted"/>: exactly it, else the closest within the tolerance, else null.</summary>
+    public static int? Pick(IEnumerable<int> offered, int wanted)
+    {
+        ArgumentNullException.ThrowIfNull(offered);
+        var candidates = offered.Where(hz => Same(hz, wanted)).ToList();
+        return candidates.Count == 0 ? null : candidates.OrderBy(hz => Math.Abs(hz - wanted)).ThenByDescending(hz => hz).First();
+    }
+
+    /// <summary>What to show for a measured rate: the requested one when the measurement is within the tolerance of it.</summary>
+    public static int Display(int measured, int? requested) =>
+        requested is { } hz && Same(measured, hz) ? hz : measured;
+}
 
 public sealed record GpuSnapshot(uint LimitMilliwatts, uint DefaultMilliwatts);
 

@@ -149,7 +149,7 @@ public static class FlyoutStateBuilder
         }
 
         var showToggle = row == LeverRow.Docker && input.Target.Mode == PowerModeKind.Station;
-        return new RowState(row, LeverRows.Title(row), Describe(row, input.Target), Live(row, input.Live), glyph, reason, showToggle, input.KeepDocker);
+        return new RowState(row, LeverRows.Title(row), Describe(row, input.Target), Live(row, input.Live, input.Target), glyph, reason, showToggle, input.KeepDocker);
     }
 
     /// <summary>What the mode set for a row, one fact per line.</summary>
@@ -256,17 +256,21 @@ public static class FlyoutStateBuilder
         { Running: true } => "Kept running",
     };
 
-    private static string? Live(LeverRow row, LiveValues live) => row switch
+    private static string? Live(LeverRow row, LiveValues live, TargetState target) => row switch
     {
         LeverRow.Cpu when live.CpuGhz is { } ghz => live.CpuUtilityPercent is { } util
             ? string.Create(CultureInfo.InvariantCulture, $"{ghz:0.0} GHz{Dot}{util:0} %")
             : string.Create(CultureInfo.InvariantCulture, $"{ghz:0.0} GHz"),
         LeverRow.Gpu when live.GpuWatts is { } watts => string.Create(CultureInfo.InvariantCulture, $"{watts:0} W"),
         LeverRow.Monitor when live.BrightnessPercent is not null || live.RefreshHz is not null =>
-            string.Join(Dot, new[] { live.BrightnessPercent is { } b ? $"{b} %" : null, live.RefreshHz is { } r ? $"{r} Hz" : null }.OfType<string>()),
+            string.Join(Dot, new[] { live.BrightnessPercent is { } b ? $"{b} %" : null, live.RefreshHz is { } r ? $"{RefreshRates.Display(r, RequestedHz(target))} Hz" : null }.OfType<string>()),
         LeverRow.Docker when live.DockerEngineRunning is { } running => running ? $"{live.DockerContainersRunning ?? 0} running" : "engine stopped",
         _ => null,
     };
+
+    /// <summary>The rate the mode sets, or the one Grid restores on the first display (the one the live probe reads).</summary>
+    private static int? RequestedHz(TargetState target) =>
+        target.Refresh is { } refresh ? refresh.RefreshHz ?? (refresh.Restore.Count > 0 ? refresh.Restore[0].RefreshHz : null) : null;
 
     public static string Duration(int seconds)
     {

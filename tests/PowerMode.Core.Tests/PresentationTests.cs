@@ -104,6 +104,22 @@ public sealed class PresentationTests
     }
 
     [Fact]
+    public void Live_refresh_within_a_hertz_shows_the_requested_rate()
+    {
+        // 60 Hz reads back as 59 Hz after it was set.
+        Assert.Equal("35 % · 60 Hz", Row(Build(PowerModeKind.Station, live: new LiveValues(BrightnessPercent: 35, RefreshHz: 59)), LeverRow.Monitor).Live);
+        Assert.Equal("58 Hz", Row(Build(PowerModeKind.Station, live: new LiveValues(RefreshHz: 58)), LeverRow.Monitor).Live);
+
+        // Grid restoring the baseline's 199 Hz.
+        Assert.Equal("199 Hz", Row(Build(PowerModeKind.Grid, live: new LiveValues(RefreshHz: 200)), LeverRow.Monitor).Live);
+
+        // Nothing requested: the measurement as it is.
+        var bare = FlyoutStateBuilder.Build(new FlyoutInput(
+            TargetPlanner.Plan(PowerModeKind.Grid, Config, null), new Dictionary<LeverKind, LeverResult>(), new HashSet<LeverKind>(), new LiveValues(RefreshHz: 59), null, Now, true, false, false, Config.Hotkeys));
+        Assert.Equal("59 Hz", Row(bare, LeverRow.Monitor).Live);
+    }
+
+    [Fact]
     public void Status_line_and_glyphs_follow_results()
     {
         var ok = Build(PowerModeKind.Station, results: new() { [LeverKind.PowerScheme] = LeverResult.Ok("x") });

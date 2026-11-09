@@ -41,10 +41,12 @@ internal sealed class DisplayModeLever : ILever
         var actions = new List<LeverAction>();
         foreach (var display in current)
         {
+            // Within a hertz is already there (60 Hz reads back as 59 Hz); changing it again would blank the screen.
             DisplayModeInfo? wanted = target.RefreshHz is { } hz
-                ? Offers(display, hz) ? display with { RefreshHz = hz } : null
+                ? RefreshRates.Same(display.RefreshHz, hz) ? null
+                    : RefreshRates.Pick(OfferedRates(display), hz) is { } offered ? display with { RefreshHz = offered } : null
                 : target.Restore.FirstOrDefault(d => string.Equals(d.Device, display.Device, StringComparison.OrdinalIgnoreCase));
-            if (wanted is not null && wanted != display)
+            if (wanted is not null && !wanted.Matches(display))
             {
                 actions.Add(new LeverAction(
                     $"{display.Device}: {Describe(display)} -> {Describe(wanted)}",
@@ -85,18 +87,20 @@ internal sealed class DisplayModeLever : ILever
         }
     }
 
-    private static bool Offers(DisplayModeInfo display, int hz)
+    /// <summary>Refresh rates the display offers at its current resolution and colour depth.</summary>
+    private static List<int> OfferedRates(DisplayModeInfo display)
     {
+        var rates = new List<int>();
         var mode = DevMode.Create();
         for (var i = 0; User32.EnumDisplaySettingsEx(display.Device, i, ref mode, 0); i++)
         {
-            if (mode.PelsWidth == display.Width && mode.PelsHeight == display.Height && mode.BitsPerPel == display.BitsPerPixel && mode.DisplayFrequency == hz)
+            if (mode.PelsWidth == display.Width && mode.PelsHeight == display.Height && mode.BitsPerPel == display.BitsPerPixel)
             {
-                return true;
+                rates.Add(mode.DisplayFrequency);
             }
         }
 
-        return false;
+        return rates;
     }
 
     private static bool Change(DisplayModeInfo wanted)
