@@ -12,6 +12,7 @@ public enum LeverKind
     Apps,
     Efficiency,
     Services,
+    SecondaryDisplays,
 }
 
 /// <summary>The rows of the flyout lever table, in their fixed order.</summary>
@@ -50,7 +51,7 @@ public static class LeverRows
     {
         LeverRow.Cpu => [LeverKind.PowerScheme],
         LeverRow.Gpu => [LeverKind.Gpu],
-        LeverRow.Monitor => [LeverKind.Brightness, LeverKind.DisplayMode],
+        LeverRow.Monitor => [LeverKind.Brightness, LeverKind.DisplayMode, LeverKind.SecondaryDisplays],
         LeverRow.Display => [LeverKind.PowerScheme],
         LeverRow.Docker => [LeverKind.Docker],
         LeverRow.Apps => [LeverKind.Apps, LeverKind.WallpaperEngine],
@@ -71,6 +72,7 @@ public static class LeverRows
         LeverKind.Docker => "Docker",
         LeverKind.Apps => "apps",
         LeverKind.Efficiency => "efficiency mode",
+        LeverKind.SecondaryDisplays => "secondary displays",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 }

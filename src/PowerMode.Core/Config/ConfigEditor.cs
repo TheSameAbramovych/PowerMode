@@ -16,23 +16,45 @@ public static class ConfigEditor
     };
 
     /// <summary>
-    /// Set <c>closeApps</c>, <c>efficiencyApps</c> and <c>pauseWallpaperEngine</c> of one saving mode. Missing objects on
-    /// the way are created; existing keys are matched case-insensitively and keep their spelling.
+    /// Write the keys whose values differ between <paramref name="before"/> and <paramref name="after"/> (nested ones
+    /// like <c>modes.station.scheme.maxProcessorPercent</c> too). Missing objects on the way are created; existing keys
+    /// are matched case-insensitively and keep their spelling; keys that did not change are not touched.
     /// </summary>
     /// <exception cref="JsonException">The text is not a JSON object.</exception>
-    public static string SetModeApps(string json, PowerModeKind mode, ModeConfig values)
+    public static string SetChanges(string json, AppConfig before, AppConfig after)
     {
-        ArgumentNullException.ThrowIfNull(values);
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
         if (JsonNode.Parse(json, documentOptions: DocumentOptions) is not JsonObject root)
         {
             throw new JsonException("The config root must be a JSON object.");
         }
 
-        var modeNode = Child(Child(root, "modes"), ModeNames.Key(mode));
-        Set(modeNode, "closeApps", JsonSerializer.SerializeToNode(values.CloseApps, JsonDefaults.Options));
-        Set(modeNode, "efficiencyApps", JsonSerializer.SerializeToNode(values.EfficiencyApps, JsonDefaults.Options));
-        Set(modeNode, "pauseWallpaperEngine", JsonValue.Create(values.PauseWallpaperEngine));
+        WriteChanges(root, Serialize(before), Serialize(after));
         return root.ToJsonString(JsonDefaults.Options);
+    }
+
+    private static JsonObject Serialize(AppConfig config) => JsonSerializer.SerializeToNode(config, JsonDefaults.Options)!.AsObject();
+
+    private static void WriteChanges(JsonObject target, JsonObject before, JsonObject after)
+    {
+        foreach (var (key, value) in after)
+        {
+            var old = before[key];
+            if (JsonNode.DeepEquals(old, value))
+            {
+                continue;
+            }
+
+            if (value is JsonObject nested && old is JsonObject oldNested)
+            {
+                WriteChanges(Child(target, key), oldNested, nested);
+            }
+            else
+            {
+                target[KeyOf(target, key)] = value?.DeepClone();
+            }
+        }
     }
 
     private static JsonObject Child(JsonObject parent, string key)
@@ -46,8 +68,6 @@ public static class ConfigEditor
         parent[KeyOf(parent, key)] = created;
         return created;
     }
-
-    private static void Set(JsonObject parent, string key, JsonNode? value) => parent[KeyOf(parent, key)] = value;
 
     private static string KeyOf(JsonObject parent, string key) =>
         parent.Select(p => p.Key).FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase)) ?? key;

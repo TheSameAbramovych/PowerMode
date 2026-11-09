@@ -77,7 +77,7 @@ internal sealed class SettingsController
 
     private async Task OnAppChangedAsync(AppChoiceChange change)
     {
-        var saved = await Task.Run(() => _services.Config.UpdateModeApps(change.Mode, m => AppSettings.SetChoice(m, change.Name, change.To)));
+        var saved = await Task.Run(() => _services.Config.UpdateMode(change.Mode, m => AppSettings.SetChoice(m, change.Name, change.To), $"{change.Name} -> {change.To}"));
         if (!saved)
         {
             _model.Settings.Rows.FirstOrDefault(r => r.Name == change.Name)?.Show(change.Mode, change.From);
@@ -92,7 +92,7 @@ internal sealed class SettingsController
 
     private async Task OnWallpaperChangedAsync(WallpaperChange change)
     {
-        var saved = await Task.Run(() => _services.Config.UpdateModeApps(change.Mode, m => m.PauseWallpaperEngine = change.Pause));
+        var saved = await Task.Run(() => _services.Config.UpdateMode(change.Mode, m => m.PauseWallpaperEngine = change.Pause, $"Wallpaper Engine {(change.Pause ? "pause" : "keep")}"));
         if (!saved)
         {
             _model.Settings.ShowWallpaper(change.Mode, !change.Pause);

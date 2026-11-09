@@ -102,7 +102,7 @@ public sealed class LeverExecutor
 
         if (plan.NotOwned)
         {
-            return LeverResult.Skipped(LeverResult.NotOwned);
+            return LeverResult.Skipped(plan.SkipReason ?? LeverResult.NotOwned);
         }
 
         if (plan.Actions.Count == 0)

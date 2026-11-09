@@ -49,6 +49,7 @@ public static class FriendlyNames
         Levers.LeverKind.Apps => "Apps",
         Levers.LeverKind.Efficiency => "Efficiency mode",
         Levers.LeverKind.Services => "Services",
+        Levers.LeverKind.SecondaryDisplays => "Secondary displays",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 }

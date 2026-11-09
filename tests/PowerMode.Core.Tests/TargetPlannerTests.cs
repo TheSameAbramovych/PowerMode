@@ -175,7 +175,9 @@ public sealed class TargetPlannerTests
         var station = TargetPlanner.Plan(PowerModeKind.Station, Config, Baseline);
         var grid = TargetPlanner.Plan(PowerModeKind.Grid, Config, null);
 
-        Assert.All(Enum.GetValues<LeverKind>().Where(k => k != LeverKind.Efficiency), k => Assert.True(station.Sets(k), k.ToString()));
+        Assert.All(Enum.GetValues<LeverKind>().Where(k => k is not (LeverKind.Efficiency or LeverKind.SecondaryDisplays)), k => Assert.True(station.Sets(k), k.ToString()));
+        Assert.False(station.Sets(LeverKind.SecondaryDisplays));
+        Assert.True(TargetPlanner.Plan(PowerModeKind.Reserve, Config, Baseline).Sets(LeverKind.SecondaryDisplays));
         Assert.False(station.Sets(LeverKind.Efficiency));
         Assert.True(TargetPlanner.Plan(PowerModeKind.Reserve, Config, Baseline).Sets(LeverKind.Efficiency));
         Assert.All(Enum.GetValues<LeverKind>(), k => Assert.False(grid.Sets(k), k.ToString()));

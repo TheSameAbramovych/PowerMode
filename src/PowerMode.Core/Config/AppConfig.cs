@@ -55,6 +55,9 @@ public sealed class ModeConfig
     public int? GpuLimitWatts { get; set; }
     public bool PauseWallpaperEngine { get; set; }
     public bool StopDocker { get; set; }
+
+    /// <summary>Turn every display but the primary off (display topology "primary only"); Grid turns them back on.</summary>
+    public bool SecondaryDisplaysOff { get; set; }
     public List<string> CloseApps { get; set; } = [];
     public List<string> EfficiencyApps { get; set; } = [];
     public List<string> StopServices { get; set; } = [];
@@ -105,6 +108,12 @@ public sealed class AppConfig
 
     /// <summary>Re-apply brightness/refresh when Windows changes display settings (at most once a minute).</summary>
     public bool ReapplyOnDisplayChange { get; set; } = true;
+
+    /// <summary>When Windows shuts down or signs out in Station or Reserve, restore Grid first (scheme, displays, GPU limit), so the next start has no limits.</summary>
+    public bool GridOnShutdown { get; set; } = true;
+
+    /// <summary>A start that finds Station or Reserve saved restores Grid instead of applying that mode again.</summary>
+    public bool StartInGrid { get; set; } = true;
 
     /// <summary>
     /// The scheme Grid activates when it does not know which one was active before (the read failed, or the state was
@@ -180,6 +189,7 @@ public sealed class AppConfig
                     CloseApps = [.. stationClose, "ChatGPT", "OneDrive", "Viber", "ms-teams", "Postman Agent"],
                     EfficiencyApps = ["Slack", "Telegram", "msedgewebview2", "PhoneExperienceHost", "CrossDeviceService"],
                     StopServices = ["WSearch", "SysMain", "DiagTrack", "Spooler", "MongoDB", "MySQL80", "postgresql-x64-18"],
+                    SecondaryDisplaysOff = true,
                 },
             },
             RelaunchArguments = new Dictionary<string, string>

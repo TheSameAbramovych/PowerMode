@@ -18,7 +18,8 @@ public sealed record FlyoutInput(
     bool KeepDocker,
     bool StartWithWindows,
     HotkeyConfig Hotkeys,
-    PowerCard? Power = null);
+    PowerCard? Power = null,
+    MachineInfo? Machine = null);
 
 /// <summary>Turns a target state, lever results and live values into the text the flyout, CLI and toast show.</summary>
 public static class FlyoutStateBuilder
@@ -160,35 +161,51 @@ public static class FlyoutStateBuilder
             }
         }
 
-        // Only a choice when the config would stop Docker; otherwise the row says it runs by config.
-        var showToggle = row == LeverRow.Docker && input.Target.Mode == PowerModeKind.Station && input.Target.DockerStopConfigured;
-        return new RowState(row, LeverRows.Title(row), Describe(row, input.Target), Live(row, input.Live, input.Target), glyph, reason, showToggle, input.KeepDocker);
+        // Only a choice when the config would stop Docker (and Docker exists); otherwise the row says why not.
+        var machine = input.Machine ?? MachineInfo.Assumed;
+        var showToggle = row == LeverRow.Docker && input.Target.Mode == PowerModeKind.Station && input.Target.DockerStopConfigured && machine.DockerInstalled;
+        var monitors = input.Live.AllMonitors();
+        return new RowState(row, LeverRows.Title(row), Describe(row, input.Target, monitors.Select(m => m.Name).ToList(), machine), Live(row, input.Live, input.Target), glyph, reason, showToggle, input.KeepDocker);
     }
 
-    /// <summary>What the mode set for a row, one fact per line.</summary>
-    public static IReadOnlyList<string> Describe(LeverRow row, TargetState target)
+    /// <summary>
+    /// What the mode set for a row, one fact per line: one line per monitor when there are several
+    /// (<c>M27Q2 · 35 % · 60 Hz</c>), and what is missing on this PC (<c>No NVIDIA GPU</c>).
+    /// </summary>
+    public static IReadOnlyList<string> Describe(LeverRow row, TargetState target, IReadOnlyList<string>? monitorNames = null, MachineInfo? machine = null)
     {
         ArgumentNullException.ThrowIfNull(target);
-        return target.Mode == PowerModeKind.Grid ? DescribeGrid(row, target) : DescribeSaving(row, target);
+        machine ??= MachineInfo.Assumed;
+        switch (row)
+        {
+            case LeverRow.Gpu when machine.Gpu is null:
+                return [MachineInfo.NoNvidiaGpu];
+            case LeverRow.Docker when !machine.DockerInstalled:
+                return [MachineInfo.DockerNotInstalled];
+        }
+
+        return target.Mode == PowerModeKind.Grid
+            ? DescribeGrid(row, target, machine)
+            : DescribeSaving(row, target, monitorNames is { Count: > 1 } names ? names : [], machine);
     }
 
-    private static string[] DescribeGrid(LeverRow row, TargetState target) => row switch
+    private static string[] DescribeGrid(LeverRow row, TargetState target, MachineInfo machine) => row switch
     {
         LeverRow.Cpu => ["Your power scheme"],
         LeverRow.Gpu => ["Your power limit"],
         LeverRow.Monitor => ["Your settings"],
         LeverRow.Display => ["Your timeouts"],
         LeverRow.Docker => [target.Docker is { Running: true } d && d.ContainersToStart.Count > 0 ? $"Running{Dot}{Count(d.ContainersToStart.Count, "container")}" : "As you left it"],
-        LeverRow.Apps => AppsGrid(target),
+        LeverRow.Apps => AppsGrid(target, machine),
         LeverRow.Efficiency => ["Off"],
         LeverRow.Services => target.Services.Start.Count > 0 ? ["Running: " + FriendlyNames.ServiceList(target.Services.Start)] : ["As you left them"],
         _ => throw new ArgumentOutOfRangeException(nameof(row), row, null),
     };
 
-    private static string[] AppsGrid(TargetState target)
+    private static string[] AppsGrid(TargetState target, MachineInfo machine)
     {
         var lines = new List<string> { "Nothing closed" };
-        if (target.Wallpaper == WallpaperAction.Play)
+        if (target.Wallpaper == WallpaperAction.Play && machine.WallpaperEngineInstalled)
         {
             lines.Add("Wallpaper Engine playing");
         }
@@ -196,7 +213,7 @@ public static class FlyoutStateBuilder
         return [.. lines];
     }
 
-    private static string[] DescribeSaving(LeverRow row, TargetState target)
+    private static string[] DescribeSaving(LeverRow row, TargetState target, IReadOnlyList<string> monitorNames, MachineInfo machine)
     {
         switch (row)
         {
@@ -205,7 +222,7 @@ public static class FlyoutStateBuilder
             case LeverRow.Gpu:
                 return [target.Gpu?.LimitWatts is { } watts ? $"Limit {watts} W" : Unchanged];
             case LeverRow.Monitor:
-                return [MonitorFact(target, string.Empty, Dot) ?? Unchanged];
+                return MonitorLines(target, monitorNames);
             case LeverRow.Display:
                 return [target.Scheme?.Configure is { } scheme ? TimeoutFact(scheme) : Unchanged];
             case LeverRow.Docker:
@@ -217,7 +234,7 @@ public static class FlyoutStateBuilder
                     apps.Add("Closed: " + FriendlyNames.ProcessList(target.Apps.Close));
                 }
 
-                if (target.Wallpaper == WallpaperAction.Pause)
+                if (target.Wallpaper == WallpaperAction.Pause && machine.WallpaperEngineInstalled)
                 {
                     apps.Add("Wallpaper Engine paused");
                 }
@@ -230,6 +247,19 @@ public static class FlyoutStateBuilder
             default:
                 throw new ArgumentOutOfRangeException(nameof(row), row, null);
         }
+    }
+
+    /// <summary>One monitor: <c>35 % · 60 Hz</c>. Several: <c>M27Q2 · 35 % · 60 Hz</c> per monitor, <c>T24i-30 · Off</c> when secondary displays are off.</summary>
+    private static string[] MonitorLines(TargetState target, IReadOnlyList<string> names)
+    {
+        var fact = MonitorFact(target, string.Empty, Dot) ?? Unchanged;
+        if (names.Count == 0)
+        {
+            return [fact];
+        }
+
+        var off = target.Topology is { PrimaryOnly: true };
+        return [.. names.Select((name, i) => $"{name}{Dot}{(off && i > 0 ? "Off" : fact)}")];
     }
 
     private static string CpuFact(SchemeConfig scheme) =>
@@ -275,11 +305,19 @@ public static class FlyoutStateBuilder
             ? string.Create(CultureInfo.InvariantCulture, $"{ghz:0.0} GHz{Dot}{util:0} %")
             : string.Create(CultureInfo.InvariantCulture, $"{ghz:0.0} GHz"),
         LeverRow.Gpu when live.GpuWatts is { } watts => string.Create(CultureInfo.InvariantCulture, $"{watts:0} W"),
-        LeverRow.Monitor when live.BrightnessPercent is not null || live.RefreshHz is not null =>
-            string.Join(Dot, new[] { live.BrightnessPercent is { } b ? $"{b} %" : null, live.RefreshHz is { } r ? $"{RefreshRates.Display(r, RequestedHz(target))} Hz" : null }.OfType<string>()),
+        LeverRow.Monitor => MonitorLive(live, target),
         LeverRow.Docker when live.DockerEngineRunning is { } running => running ? $"{live.DockerContainersRunning ?? 0} running" : "engine stopped",
         _ => null,
     };
+
+    /// <summary>One line per monitor, in the order of the set lines: <c>35 % · 60 Hz</c>, or <c>Off</c>.</summary>
+    private static string? MonitorLive(LiveValues live, TargetState target)
+    {
+        var lines = live.AllMonitors().Select(m => m.Active
+            ? string.Join(Dot, new[] { m.BrightnessPercent is { } b ? $"{b} %" : null, m.RefreshHz is { } r ? $"{RefreshRates.Display(r, RequestedHz(target))} Hz" : null }.OfType<string>())
+            : "Off").ToList();
+        return lines.All(l => l.Length == 0) ? null : string.Join(Environment.NewLine, lines);
+    }
 
     /// <summary>The rate the mode sets, or the one Grid restores on the first display (the one the live probe reads).</summary>
     private static int? RequestedHz(TargetState target) =>

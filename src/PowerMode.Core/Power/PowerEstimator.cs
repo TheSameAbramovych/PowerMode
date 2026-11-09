@@ -28,9 +28,18 @@ public sealed class PowerConfig
 /// <param name="CpuUtilityPercent">% Processor Utility (may exceed 100 when boosting).</param>
 /// <param name="CpuGhz">Effective clock.</param>
 /// <param name="GpuW">Measured board power (NVML).</param>
-/// <param name="BrightnessPercent">Monitor brightness over DDC/CI.</param>
-/// <param name="RefreshHz">Refresh rate of the display.</param>
-public sealed record PowerInputs(double? CpuUtilityPercent, double? CpuGhz, double? GpuW, int? BrightnessPercent, int? RefreshHz);
+/// <param name="Monitors">Every monitor that is on: brightness and refresh rate (unknown values are assumed).</param>
+public sealed record PowerInputs(double? CpuUtilityPercent, double? CpuGhz, double? GpuW, IReadOnlyList<MonitorInput> Monitors)
+{
+    /// <summary>One monitor.</summary>
+    public PowerInputs(double? cpuUtilityPercent, double? cpuGhz, double? gpuW, int? brightnessPercent, int? refreshHz)
+        : this(cpuUtilityPercent, cpuGhz, gpuW, [new MonitorInput(brightnessPercent, refreshHz)])
+    {
+    }
+}
+
+/// <summary>One monitor of the estimate: brightness (DDC/CI or the laptop panel) and the display's refresh rate.</summary>
+public sealed record MonitorInput(int? BrightnessPercent, int? RefreshHz);
 
 /// <summary>
 /// One estimate. <see cref="GpuW"/> is measured (null when NVML does not answer); the rest is estimated.
@@ -80,14 +89,14 @@ public static class PowerEstimator
         return config.MonitorBaseW + config.MonitorPerPercentW * brightness + (refreshHz > HighRefreshAboveHz ? config.HighRefreshExtraW : 0);
     }
 
-    /// <summary><c>(cpu + gpu + other) / psuEfficiency + monitor + offset</c> (the monitor has its own supply).</summary>
+    /// <summary><c>(cpu + gpu + other) / psuEfficiency + monitors + offset</c> (each monitor has its own supply).</summary>
     public static PowerEstimate Estimate(PowerConfig config, PowerInputs inputs, PowerCalibration? calibration = null)
     {
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(inputs);
         var cpu = CpuW(config, inputs.CpuUtilityPercent, inputs.CpuGhz);
         var gpu = inputs.GpuW is { } measured ? Math.Max(measured, 0) : (double?)null;
-        var monitor = MonitorW(config, inputs.BrightnessPercent, inputs.RefreshHz);
+        var monitor = inputs.Monitors.Sum(m => MonitorW(config, m.BrightnessPercent, m.RefreshHz));
         var efficiency = config.PsuEfficiency > 0 ? config.PsuEfficiency : 1;
         var total = (cpu + (gpu ?? 0) + config.OtherW) / efficiency + monitor + (calibration?.OffsetW ?? 0);
         return new PowerEstimate(cpu, gpu, monitor, total - cpu - (gpu ?? 0) - monitor, total);

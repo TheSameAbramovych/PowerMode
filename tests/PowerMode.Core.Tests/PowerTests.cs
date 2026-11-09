@@ -42,8 +42,10 @@ public sealed class PowerEstimatorTests
         Assert.True(PowerEstimator.Estimate(Config, Typical with { CpuUtilityPercent = 60 }).TotalW > baseline);
         Assert.True(PowerEstimator.Estimate(Config, Typical with { CpuGhz = 3.8 }).TotalW > baseline);
         Assert.True(PowerEstimator.Estimate(Config, Typical with { GpuW = 90 }).TotalW > baseline);
-        Assert.True(PowerEstimator.Estimate(Config, Typical with { BrightnessPercent = 100 }).TotalW > baseline);
-        Assert.True(PowerEstimator.Estimate(Config, Typical with { RefreshHz = 60 }).TotalW < baseline);
+        Assert.True(PowerEstimator.Estimate(Config, Typical with { Monitors = [new MonitorInput(100, 200)] }).TotalW > baseline);
+        Assert.True(PowerEstimator.Estimate(Config, Typical with { Monitors = [new MonitorInput(80, 200), new MonitorInput(35, 60)] }).TotalW > baseline);
+        Assert.True(PowerEstimator.Estimate(Config, Typical with { Monitors = [] }).TotalW < baseline);
+        Assert.True(PowerEstimator.Estimate(Config, Typical with { Monitors = [new MonitorInput(80, 60)] }).TotalW < baseline);
         Assert.True(PowerEstimator.Estimate(new PowerConfig { OtherW = 60 }, Typical).TotalW > baseline);
         Assert.True(PowerEstimator.Estimate(new PowerConfig { PsuEfficiency = 0.8 }, Typical).TotalW > baseline);
     }

@@ -36,6 +36,7 @@ public static class TargetPlanner
             Scheme = RestoreScheme(config, snapshot),
             Monitor = snapshot.Owes(LeverKind.Brightness) && snapshot.Monitors.Count > 0 ? new MonitorTarget(null, snapshot.Monitors) : null,
             Refresh = snapshot.Owes(LeverKind.DisplayMode) && snapshot.Displays.Count > 0 ? new RefreshTarget(null, snapshot.Displays) : null,
+            Topology = snapshot.Owes(LeverKind.SecondaryDisplays) && snapshot.Topology is { } topology ? new TopologyTarget(false, topology) : null,
             Gpu = snapshot.Owes(LeverKind.Gpu) && snapshot.Gpu is { } gpu ? new GpuTarget(null, gpu.LimitMilliwatts) : null,
             Wallpaper = snapshot.Owes(LeverKind.WallpaperEngine) && snapshot.WallpaperEngineRunning ? WallpaperAction.Play : WallpaperAction.Leave,
             Docker = snapshot.Owes(LeverKind.Docker) ? RestoreDocker(config, snapshot) : null,
@@ -70,6 +71,8 @@ public static class TargetPlanner
             Scheme = new SchemeTarget(m.Scheme.Id, m.Scheme),
             Monitor = m.BrightnessPercent is { } brightness ? new MonitorTarget(brightness, []) : null,
             Refresh = m.RefreshRateHz is { } hz ? new RefreshTarget(hz, []) : null,
+            Topology = m.SecondaryDisplaysOff ? new TopologyTarget(true, null)
+                : snapshot?.Topology is { } topology ? new TopologyTarget(false, topology) : null,
             Gpu = m.GpuLimitWatts is { } watts ? new GpuTarget(watts, null) : null,
             Wallpaper = m.PauseWallpaperEngine ? WallpaperAction.Pause
                 : snapshot?.WallpaperEngineRunning == true ? WallpaperAction.Play : WallpaperAction.Leave,

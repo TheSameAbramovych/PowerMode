@@ -8,7 +8,7 @@ namespace PowerMode.Core.Levers;
 public sealed record LeverAction(string Description, Func<CancellationToken, Task> Execute, bool RequiresElevation = false);
 
 /// <summary>What a lever would do to reach the target from the current state.</summary>
-public sealed record LeverPlan(IReadOnlyList<LeverAction> Actions, string? Unavailable = null, bool NotOwned = false, bool Permanent = false)
+public sealed record LeverPlan(IReadOnlyList<LeverAction> Actions, string? Unavailable = null, bool NotOwned = false, bool Permanent = false, string? SkipReason = null)
 {
     /// <summary>The mode does not own this lever.</summary>
     public static LeverPlan None { get; } = new([], NotOwned: true);
@@ -20,6 +20,9 @@ public sealed record LeverPlan(IReadOnlyList<LeverAction> Actions, string? Unava
 
     /// <summary>The lever cannot work on this machine (no NVML, Docker not installed, ...).</summary>
     public static LeverPlan Fail(string reason, bool permanent = false) => new([], reason, Permanent: permanent);
+
+    /// <summary>The lever has nothing to act on here (no NVIDIA GPU, Docker not installed, one display): skipped, not failed.</summary>
+    public static LeverPlan Skip(string reason) => new([], NotOwned: true, SkipReason: reason);
 }
 
 public sealed record ApplyContext(TargetState Target, PersistedState State, bool IsElevated);

@@ -15,6 +15,9 @@ public sealed record MonitorTarget(int? BrightnessPercent, IReadOnlyList<Monitor
 /// <summary>Either one refresh rate for every display that offers it, or restore each display mode.</summary>
 public sealed record RefreshTarget(int? RefreshHz, IReadOnlyList<DisplayModeInfo> Restore);
 
+/// <summary>Secondary displays off (primary only), or the topology to restore (they are turned back on).</summary>
+public sealed record TopologyTarget(bool PrimaryOnly, DisplayTopology? Restore);
+
 /// <summary>Either a limit in watts (clamped by the lever) or an exact milliwatt value to restore.</summary>
 public sealed record GpuTarget(int? LimitWatts, uint? RestoreMilliwatts);
 
@@ -58,6 +61,8 @@ public sealed record TargetState
 
     public RefreshTarget? Refresh { get; init; }
 
+    public TopologyTarget? Topology { get; init; }
+
     public GpuTarget? Gpu { get; init; }
 
     public WallpaperAction Wallpaper { get; init; }
@@ -85,6 +90,7 @@ public sealed record TargetState
         LeverKind.Apps => Apps.Close.Count > 0 || Apps.Relaunch.Count > 0,
         LeverKind.Efficiency => Efficiency.ProcessNames.Count > 0,
         LeverKind.Services => Services.Stop.Count > 0 || Services.Start.Count > 0,
+        LeverKind.SecondaryDisplays => Topology is not null,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 }

@@ -43,6 +43,12 @@ public static class RefreshRates
         requested is { } hz && Same(measured, hz) ? hz : measured;
 }
 
+/// <summary>
+/// The active display configuration as Windows reports it (QueryDisplayConfig): <see cref="Data"/> is the paths and
+/// modes, base64, for SetDisplayConfig; <see cref="ActiveDisplays"/> how many displays were on.
+/// </summary>
+public sealed record DisplayTopology(int ActiveDisplays, string Data);
+
 public sealed record GpuSnapshot(uint LimitMilliwatts, uint DefaultMilliwatts);
 
 public sealed record DockerSnapshot(bool EngineRunning, IReadOnlyList<string> RunningContainers);
@@ -66,6 +72,9 @@ public sealed class Snapshot
     public List<MonitorLevel> Monitors { get; set; } = [];
 
     public List<DisplayModeInfo> Displays { get; set; } = [];
+
+    /// <summary>The active display topology (paths and modes, opaque to Core), so Grid can turn secondary displays back on.</summary>
+    public DisplayTopology? Topology { get; set; }
 
     public GpuSnapshot? Gpu { get; set; }
 
@@ -145,6 +154,9 @@ public sealed class Snapshot
             case LeverKind.Services:
                 Services = new Dictionary<string, bool>(older.Services, StringComparer.OrdinalIgnoreCase);
                 CoveredServices = older.CoveredServices is { } services ? [.. services] : null;
+                break;
+            case LeverKind.SecondaryDisplays:
+                Topology = older.Topology;
                 break;
             case LeverKind.Efficiency:
                 break;

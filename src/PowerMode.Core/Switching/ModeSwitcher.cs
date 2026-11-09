@@ -155,6 +155,45 @@ public sealed class ModeSwitcher : IDisposable
         }
     }
 
+    /// <summary>
+    /// Windows is shutting down in a saving mode: restore Grid for <see cref="StartAndShutdown.ShutdownLevers"/> only,
+    /// within <paramref name="budget"/> (a running switch is waited for within the same budget), then save Grid as the
+    /// mode with every part not restored still owed. False when nothing was done (Grid, or the budget ran out first).
+    /// </summary>
+    public async Task<bool> ShutdownToGridAsync(TimeSpan budget)
+    {
+        using var deadline = new CancellationTokenSource(budget);
+        try
+        {
+            await _gate.WaitAsync(deadline.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _log.Write(Category, "Shutdown: a switch is still running; Grid not restored");
+            return false;
+        }
+
+        try
+        {
+            if (State.Mode == PowerModeKind.Grid)
+            {
+                return false;
+            }
+
+            _log.Write(Category, $"Shutdown: restoring Grid from {ModeNames.Display(State.Mode)} (power scheme, displays, brightness, GPU limit)");
+            var outcome = await ApplyAsync(PowerModeKind.Grid, _config(), StartAndShutdown.ShutdownLevers, deadline.Token).ConfigureAwait(false);
+            State.Mode = PowerModeKind.Grid;
+            State.Since = _time.GetUtcNow();
+            SettleGridRestore(outcome);
+            _store.Save(State);
+            return true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>Keep the flyout open when it loses focus, or not. Saved at once (under the gate, like every state write).</summary>
     public Task SetFlyoutPinnedAsync(bool pinned, CancellationToken cancellationToken = default) =>
         SaveAsync(state => state.FlyoutPinned = pinned, cancellationToken);

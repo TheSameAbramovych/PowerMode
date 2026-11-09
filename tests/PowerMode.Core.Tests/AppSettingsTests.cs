@@ -157,9 +157,14 @@ public sealed class ConfigEditTests
               "unknownKey": 5,
             }
             """;
-        var values = new ModeConfig { CloseApps = ["steam", "Discord"], EfficiencyApps = ["Slack"], PauseWallpaperEngine = false };
+        var before = ConfigLoader.Parse(json).Config!;
+        var after = ConfigLoader.Parse(json).Config!;
+        after.Modes.Reserve.CloseApps = ["steam", "Discord"];
+        after.Modes.Reserve.EfficiencyApps = ["Slack"];
+        after.Modes.Reserve.PauseWallpaperEngine = false;
+        after.Modes.Reserve.Scheme.MaxProcessorPercent = 45;
 
-        var edited = ConfigEditor.SetModeApps(json, PowerModeKind.Reserve, values);
+        var edited = ConfigEditor.SetChanges(json, before, after);
         using var document = JsonDocument.Parse(edited);
         var root = document.RootElement;
 
@@ -170,19 +175,25 @@ public sealed class ConfigEditTests
         Assert.Equal(["steam", "Discord"], reserve.GetProperty("CloseApps").EnumerateArray().Select(e => e.GetString()));
         Assert.Equal(["Slack"], reserve.GetProperty("efficiencyApps").EnumerateArray().Select(e => e.GetString()));
         Assert.False(reserve.GetProperty("pauseWallpaperEngine").GetBoolean());
+        Assert.Equal(45, reserve.GetProperty("scheme").GetProperty("maxProcessorPercent").GetInt32());
+        Assert.False(reserve.GetProperty("scheme").TryGetProperty("minProcessorPercent", out _));
+        Assert.False(root.TryGetProperty("docker", out _));
         Assert.Contains(Environment.NewLine + "  ", edited, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Missing_objects_are_created_and_a_non_object_root_is_rejected()
     {
-        var edited = ConfigEditor.SetModeApps("{}", PowerModeKind.Station, new ModeConfig { CloseApps = ["steam"] });
+        var before = AppConfig.CreateDefault();
+        var after = AppConfig.CreateDefault();
+        after.Modes.Station.CloseApps = ["steam"];
+        var edited = ConfigEditor.SetChanges("{}", before, after);
         var config = ConfigLoader.Parse(edited);
 
         Assert.True(config.IsValid);
         Assert.Equal(["steam"], config.Config!.Modes.Station.CloseApps);
-        Assert.Empty(config.Config.Modes.Station.EfficiencyApps);
-        Assert.Throws<JsonException>(() => ConfigEditor.SetModeApps("[1]", PowerModeKind.Station, new ModeConfig()));
+        Assert.Equal(35, config.Config.Modes.Station.BrightnessPercent);
+        Assert.Throws<JsonException>(() => ConfigEditor.SetChanges("[1]", before, after));
     }
 }
 
@@ -199,11 +210,11 @@ public sealed class ConfigStoreUpdateTests
         var changed = 0;
         store.Changed += (_, _) => changed++;
 
-        Assert.True(store.UpdateModeApps(PowerModeKind.Station, m =>
+        Assert.True(store.UpdateMode(PowerModeKind.Station, m =>
         {
             AppSettings.SetChoice(m, "Discord", AppChoice.Close);
             m.PauseWallpaperEngine = false;
-        }));
+        }, "test"));
 
         Assert.Equal(["steam", "EPSDNMON", "Discord"], store.Current.Modes.Station.CloseApps);
         Assert.False(store.Current.Modes.Station.PauseWallpaperEngine);
@@ -231,15 +242,15 @@ public sealed class ConfigStoreUpdateTests
         Assert.True(store.Load());
 
         File.WriteAllText(path, """{ "modes": { "station": { "brightnessPercent": 400 } } }""");
-        Assert.False(store.UpdateModeApps(PowerModeKind.Station, m => m.CloseApps.Clear()));
+        Assert.False(store.UpdateMode(PowerModeKind.Station, m => m.CloseApps.Clear(), "test"));
         Assert.Contains("400", File.ReadAllText(path), StringComparison.Ordinal);
-        Assert.Contains(log.Lines, l => l.Contains("config.json is invalid now", StringComparison.Ordinal));
+        Assert.Contains(log.Lines, l => l.Contains("config.json would be invalid", StringComparison.Ordinal));
 
         File.WriteAllText(path, "{ not json");
-        Assert.False(store.UpdateModeApps(PowerModeKind.Station, m => m.CloseApps.Clear()));
+        Assert.False(store.UpdateMode(PowerModeKind.Station, m => m.CloseApps.Clear(), "test"));
         Assert.Equal("{ not json", File.ReadAllText(path));
         Assert.Equal(["steam", "EPSDNMON"], store.Current.Modes.Station.CloseApps);
-        Assert.Throws<ArgumentOutOfRangeException>(() => store.UpdateModeApps(PowerModeKind.Grid, _ => { }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => store.UpdateMode(PowerModeKind.Grid, _ => { }, "test"));
     }
 
     [Fact]
@@ -249,7 +260,7 @@ public sealed class ConfigStoreUpdateTests
         var path = dir.File(Path.Combine("sub", "config.json"));
         using var store = new ConfigStore(path, new ListLog());
 
-        Assert.True(store.UpdateModeApps(PowerModeKind.Reserve, m => AppSettings.SetChoice(m, "Slack", AppChoice.Keep)));
+        Assert.True(store.UpdateMode(PowerModeKind.Reserve, m => AppSettings.SetChoice(m, "Slack", AppChoice.Keep), "test"));
 
         var saved = ConfigLoader.Parse(File.ReadAllText(path)).Config!;
         Assert.DoesNotContain("Slack", saved.Modes.Reserve.EfficiencyApps);

@@ -2,7 +2,14 @@ using PowerMode.Core.Levers;
 
 namespace PowerMode.Core.Presentation;
 
-/// <summary>Values measured right now. Anything not measurable stays null and is not shown.</summary>
+/// <summary>One monitor right now: its name (EDID friendly name), brightness, its display's refresh rate, and whether it is on.</summary>
+public sealed record MonitorLive(string Name, int? BrightnessPercent, int? RefreshHz, bool Active = true);
+
+/// <summary>
+/// Values measured right now. Anything not measurable stays null and is not shown. <see cref="BrightnessPercent"/>
+/// and <see cref="RefreshHz"/> are the primary monitor; <see cref="Monitors"/> lists every monitor, primary first,
+/// when more than one is known.
+/// </summary>
 public sealed record LiveValues(
     double? CpuGhz = null,
     double? CpuUtilityPercent = null,
@@ -10,12 +17,18 @@ public sealed record LiveValues(
     int? BrightnessPercent = null,
     int? RefreshHz = null,
     bool? DockerEngineRunning = null,
-    int? DockerContainersRunning = null)
+    int? DockerContainersRunning = null,
+    IReadOnlyList<MonitorLive>? Monitors = null)
 {
     public static LiveValues Empty { get; } = new();
 
-    /// <summary>The inputs of the power estimate.</summary>
-    public Power.PowerInputs ToPowerInputs() => new(CpuUtilityPercent, CpuGhz, GpuWatts, BrightnessPercent, RefreshHz);
+    /// <summary>Every monitor, primary first; a single unnamed one built from the primary values when none are listed.</summary>
+    public IReadOnlyList<MonitorLive> AllMonitors() =>
+        Monitors is { Count: > 0 } monitors ? monitors : [new MonitorLive(string.Empty, BrightnessPercent, RefreshHz)];
+
+    /// <summary>The inputs of the power estimate: every monitor that is on.</summary>
+    public Power.PowerInputs ToPowerInputs() =>
+        new(CpuUtilityPercent, CpuGhz, GpuWatts, [.. AllMonitors().Where(m => m.Active).Select(m => new Power.MonitorInput(m.BrightnessPercent, m.RefreshHz))]);
 }
 
 public enum RowGlyph
