@@ -96,8 +96,8 @@ Left click toggles the flyout. Right click: `Grid` / `Station` / `Reserve` (radi
 separator, `Open`, `Start with Windows` (check), `Open config`, separator, `Switch to Grid and quit`,
 `Quit (keep mode)`.
 
-**Flyout** — borderless window 380 px wide, height to content (at most the work-area height less 24 px; the
-lever table never scrolls), 8 px DWM rounded corners,
+**Flyout** — borderless window 380 px wide, height to content (at most the work-area height less 24 px; taller
+content scrolls, the settings pages under their fixed header and tabs), 8 px DWM rounded corners,
 1 px border, anchored at the bottom-right of the work area (12 px margin), shown by tray left click or
 `PowerMode.exe --open`. **Pinned** (default, `flyoutPinned` in state.json): stays open when it loses focus,
 hides on ×, Esc or a tray left click. Unpinned: also hides on `Deactivated`. Re-opening always shows the
@@ -157,7 +157,8 @@ per app, three columns: the app (friendly name, process file in small muted text
 `Postman Agent` / `Postman Agent.exe`), **Station**, **Reserve**. Each mode cell is a compact choice box
 `Keep` / `Efficiency` / `Close` (same control everywhere, keyboard accessible, nothing hover-only).
 `Efficiency` = the mode's `efficiencyApps`, `Close` = its `closeApps`; an app is in at most one of the two
-per mode. A first fixed row `Wallpaper Engine` offers `Keep` / `Pause` (= `pauseWallpaperEngine`).
+per mode. A first fixed row `Wallpaper Engine` offers `Keep` / `Pause` (= `pauseWallpaperEngine`; hidden when Wallpaper
+Engine is not installed). File names wrap (before the extension), never cut with "…".
 - Rows: every name in any `closeApps`/`efficiencyApps`, plus processes of the user's session that have a
   visible top-level window or are in a catalogue of common background apps (Steam, Discord, Spotify,
   Telegram, Slack, Viber, Teams, ChatGPT, OneDrive, Postman Agent, EPSDNMON, Epic Games Launcher,
@@ -165,8 +166,9 @@ per mode. A first fixed row `Wallpaper Engine` offers `Keep` / `Pause` (= `pause
   Rider, WebStorm, Zoom), never system processes (image under the Windows folder, shell processes,
   PowerMode itself); plus names typed into `Add process…` (no `.exe`, no path; `.exe` is dropped).
   Order: rows with a non-Keep choice first, then alphabetical; the order stays while the page is open.
-- Only the app list scrolls (8 rows), so the page stays within 600 px. At the bottom: `Open config.json`
-  for everything the page does not cover (services, levers, hotkeys).
+- The app list scrolls (8 rows); a page taller than the flyout scrolls below the header and tabs (rendered
+  at 648 DIP, 1080p at 150 %). At the bottom: `Open config.json` for everything the page does not cover
+  (services, levers, hotkeys). Switching tabs keeps the page as it was (`Saved`, added names, row order).
 - Every change is saved at once to config.json: only `closeApps`, `efficiencyApps` and
   `pauseWallpaperEngine` of that mode are rewritten (other keys stay; comments do not survive an edit),
   through a temp file and a rename; the watcher does not reload our own write. A file that is invalid on
@@ -177,15 +179,18 @@ per mode. A first fixed row `Wallpaper Engine` offers `Keep` / `Pause` (= `pause
   switch): to `Keep` → relaunch it if PowerMode closed it, clear efficiency mode if PowerMode set it;
   to `Close` → close it now and record it, so Grid relaunches it; to `Efficiency` → efficiency mode on it
   now (an app PowerMode closed stays closed until the next apply). Wallpaper Engine likewise. A change for
-  the other mode takes effect on its next apply. The lever table shows the new lists immediately.
+  the other mode takes effect on its next apply. The lever table shows the new lists immediately. When a lever
+  fails in that apply (e.g. it needs administrator), the warning line says `Saved, but not applied now: <reason>`.
 
 **Settings tabs and the Levers page** — the settings pages have the header `Settings` and two tabs, `Apps`
 and `Levers` (selected: semibold, accent underline). Levers uses the Apps page's two-column layout (Station |
 Reserve, the same choice boxes): CPU max (20–100 %, steps of 5; the live estimated CPU watts beside it),
-CPU boost, GPU limit in W (typed; clamped to the card's NVML range on save, the row shows `Watts, range
-60–132 W`; greyed with `No NVIDIA GPU detected` without NVML), brightness (Keep or 0–100 % in steps of 5),
+CPU boost, GPU limit in W (typed; empty reads `Keep`; clamped to the card's NVML range on save and then said
+so, the row shows `Watts, range 60–132 W`; a typing error shows under the row; greyed with `No NVIDIA GPU
+detected` without NVML or a controllable limit; a GPU whose limit NVML does not support is skipped, not failed), brightness (Keep or 0–100 % in steps of 5),
 refresh rate (Keep or the union of rates the displays offer at their resolution from 50 Hz), other displays
-on/off, display off after and hibernate after (Never or standard minutes), Docker Desktop (Keep running /
+on/off, display off after and hibernate after (Never or standard minutes; a value in seconds that is not whole
+minutes is listed as it is, e.g. `30 s`), Docker Desktop (Keep running /
 Stop; disabled when not installed), Wallpaper Engine (Keep / Pause; hidden when not installed). A value set in
 config.json that is not a step is listed as it is. Every change writes only the changed keys, shows
 `Saved 10:31`, and applies at once when it is for the current mode. Footer: `Windows caps the CPU by % of max
@@ -220,8 +225,9 @@ offered refresh rates, Docker CLI, Wallpaper Engine path, rights, version), logg
 GPU`, `Docker Desktop not installed`, Wallpaper Engine lines hidden) and the Levers page. Levers without their
 hardware or software are skipped with that reason, not failed. First start on a PC (config.json created):
 `fallbackScheme` = the scheme active then (unless PowerMode's), and the estimate's CPU part tuned from the CPU
-name: TDP guess (desktop Ryzen 65 W, Ryzen 5 X 95 W, Ryzen 7/9 X 105 W, Intel K 125 W, desktop 65 W, laptop
-U 15 / P 28 / T 35 / HS 35 / H 45 / HX 55 W, else 65 W) scales `cpuIdleW` and `cpuSpanW`, the rated clock
+name: TDP guess (desktop Ryzen 65 W, GE/E 35 W, Ryzen 5 X 95 W, Ryzen 7/9 X 105 W, Threadripper 280 W, Ryzen
+AI 28 W / HX 54 W, Intel K 125 W, Ice/Tiger Lake G 15 W, Core Ultra K 125 / U 15 / V 17 / H 28 / HX 55 / else
+65 W, desktop 65 W, laptop U 15 / P 28 / T 35 / HS 35 / H 45 / HX 55 W, else 65 W) scales `cpuIdleW` and `cpuSpanW`, the rated clock
 sets `cpuBaseGhz`. Tray menu `Create desktop shortcut` makes the same shortcut as `install.ps1`.
 
 **Application icon** — `src/PowerMode.App/Assets/PowerMode.ico` (16–256 px): the plug glyph in the accent
@@ -238,7 +244,8 @@ colour on a rounded dark tile; exe icon and flyout window icon. Generated by `to
 - `PowerMode.exe` — start the tray app (second instance forwards to the first over a named pipe and exits).
 - `--quit` — ask the running instance to quit (keeps the mode; a running switch finishes first) and wait until it has gone.
 - `--mode grid|station|reserve` — apply (through the running instance if any, else apply and exit).
-- `--status` — print the lever table as text.
+- `--status` — print the lever table as text (redirected output is UTF-8; when the parent console decodes with
+  an OEM code page, as Windows PowerShell 5.1 does, the symbols become ASCII: `·` → `-`, `≈` → `~`).
 - `--dry-run --mode X` — print what would change, change nothing.
 - `--render-states <dir>` — render the flyout to PNG for review: `grid.png`, `grid-restored.png` (Grid
   after a blackout, restoring the snapshot), `station.png`, `reserve.png`, `station-applying.png` (CPU
@@ -246,11 +253,15 @@ colour on a rounded dark tile; exe icon and flyout window icon. Generated by `to
   administrator", banner visible), `reserve-light.png` (light theme), `settings-apps.png` and
   `settings-apps-light.png` (the Apps settings page), `settings-apps-saved.png` (with `Saved`),
   `hero-grid.png` (Grid, calibrated, no "vs Grid"), `hero-calibrating.png` (the calibration form),
-  `settings-levers.png` and `settings-levers-light.png` (the Levers page), `station-two-monitors.png`, plus
+  `settings-levers.png` and `settings-levers-light.png` (the Levers page), `station-two-monitors.png`,
+  `settings-levers-648.png` (the Levers page in a 648 DIP flyout: it scrolls under the header and tabs),
+  `settings-apps-no-wallpaper.png` (Wallpaper Engine not installed), `reserve-failed-long-status.png` (a
+  failure status beside a calibration from another day: both wrap, nothing is cut), plus
   `tray-<mode>.png` / `tray-<mode>-light.png` and `tray-station-applying[-light].png` (16/20/24/32 px, 4×, on
   the dark / light taskbar colour) for the
-  three modes. Uses fake lever data; touches nothing. Exits with an error naming any state whose content
-  is taller than the flyout may grow (work-area height less 24 px); prints each state's height. Exit when done.
+  three modes. Uses fake lever data; touches nothing. Exits with an error naming any lever-table state whose
+  content is taller than the flyout may grow (work-area height less 24 px; settings pages scroll instead);
+  prints each state's height. Exit when done.
 - `--install-autostart` / `--uninstall-autostart` — create/delete the scheduled task `PowerMode`
   (trigger: at logon of this user, run level Highest, no battery conditions, no time limit, start in
   the exe folder). Self-elevates with `runas` if needed.
@@ -261,7 +272,9 @@ colour on a rounded dark tile; exe icon and flyout window icon. Generated by `to
 `%LOCALAPPDATA%\PowerMode\config.json` (created with the defaults above on first run; `FileSystemWatcher`
 reload, invalid JSON → keep last good + log), `state.json` (current mode, snapshot, per-mode options
 like Keep Docker, timestamps), `logs\powermode-YYYYMMDD.log` (plain text, every lever action with
-result and duration, 14 days kept). Config schema is documented in README (hotkeys, per-mode lever
+result and duration, 14 days kept; a write that collides with another PowerMode process is retried for up to
+100 ms; a log that still cannot be written goes to `%TEMP%\PowerMode\powermode-fallback.log`, deleted after 14 days
+or past 5 MB). Config schema is documented in README (hotkeys, per-mode lever
 values, kill/efficiency/service lists, docker container exclusions, flyout anchor).
 
 ## 7. Tech

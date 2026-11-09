@@ -55,7 +55,8 @@ public sealed record MachineInfo(
 
 /// <summary>
 /// A guess of the CPU's power from its name (no measurement exists), to tune the estimate on any PC: desktop Ryzen
-/// non-X 65 W, Ryzen 5 X 95 W, Ryzen 7/9 X 105 W, Intel K 125 W, desktop non-K 65 W, laptop chips 15–55 W.
+/// non-X 65 W, GE/E 35 W, Ryzen 5 X 95 W, Ryzen 7/9 X 105 W, Threadripper 280 W, Ryzen AI 28 W (HX 54 W), Intel K
+/// 125 W, desktop non-K 65 W, Ice/Tiger Lake G 15 W, Core Ultra by suffix, laptop chips 15–55 W.
 /// </summary>
 public static partial class CpuProfiles
 {
@@ -71,10 +72,31 @@ public static partial class CpuProfiles
             return DefaultTdpW;
         }
 
+        if (cpuName.Contains("Threadripper", StringComparison.OrdinalIgnoreCase))
+        {
+            return 280;
+        }
+
+        if (RyzenAiPattern().Match(cpuName) is { Success: true } ai)
+        {
+            return ai.Groups["hx"].Success ? 54 : 28;
+        }
+
         if (RyzenPattern().Match(cpuName) is { Success: true } ryzen)
         {
             var tier = ryzen.Groups["tier"].Value;
-            return Suffix(ryzen.Groups["suffix"].Value) ?? (ryzen.Groups["suffix"].Value.StartsWith('X') ? (tier == "5" ? 95 : 105) : DefaultTdpW);
+            var suffix = ryzen.Groups["suffix"].Value;
+            if (suffix is "GE" or "E")
+            {
+                return 35;
+            }
+
+            return Suffix(suffix) ?? (suffix.StartsWith('X') ? (tier == "5" ? 95 : 105) : DefaultTdpW);
+        }
+
+        if (IntelMobileGPattern().IsMatch(cpuName))
+        {
+            return 15;
         }
 
         if (IntelPattern().Match(cpuName) is { Success: true } intel)
@@ -83,7 +105,7 @@ public static partial class CpuProfiles
             return suffix.StartsWith('K') ? 125 : Suffix(suffix) ?? DefaultTdpW;
         }
 
-        return DefaultTdpW;
+        return CoreSeriesPattern().Match(cpuName) is { Success: true } core ? CoreSeriesSuffix(core.Groups["suffix"].Value) : DefaultTdpW;
     }
 
     /// <summary>The estimate's CPU part for this CPU: idle and span scale with the TDP; the base clock is the rated one.</summary>
@@ -113,6 +135,27 @@ public static partial class CpuProfiles
         "HX" => 55,
         _ => null,
     };
+
+    /// <summary>Core Ultra and Core (series 1) names: K/KF 125 W, U 15 W, V 17 W, H 28 W, HX 55 W, none or F 65 W.</summary>
+    private static int CoreSeriesSuffix(string suffix) => suffix switch
+    {
+        _ when suffix.StartsWith('K') => 125,
+        "U" => 15,
+        "V" => 17,
+        "H" => 28,
+        "HX" => 55,
+        _ => DefaultTdpW,
+    };
+
+    [GeneratedRegex(@"Ryzen\s+AI\b(?:\s+\d+)?\s+(?<hx>HX\b)?", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
+    private static partial Regex RyzenAiPattern();
+
+    /// <summary>Ice Lake and Tiger Lake laptop chips (i5-1035G1, i7-1165G7): 15 W.</summary>
+    [GeneratedRegex(@"\bi[3579]-\d{4}G\d", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
+    private static partial Regex IntelMobileGPattern();
+
+    [GeneratedRegex(@"(?:\bUltra\s+[3579]|\bCore(?:\(TM\))?\s+[357])\s+\d{3}(?<suffix>[A-Z]*)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
+    private static partial Regex CoreSeriesPattern();
 
     [GeneratedRegex(@"Ryzen\s+(?<tier>[3579])\s+(?:PRO\s+)?\d{4}(?<suffix>[A-Z0-9]*)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
     private static partial Regex RyzenPattern();

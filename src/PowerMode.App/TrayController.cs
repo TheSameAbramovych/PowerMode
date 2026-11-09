@@ -2,6 +2,7 @@ using System.Globalization;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
@@ -53,6 +54,9 @@ internal sealed class TrayController : IDisposable
     private SwitchInProgress? _progress;
     private bool _readingLive;
     private bool _reapplying;
+
+    /// <summary>The user asked for a mode (segment, hotkey, menu, command line) since start; the start action then stands back.</summary>
+    private bool _switchRequestedSinceStart;
     private bool _disposed;
     private bool _autostart;
     private int _spinnerFrame;
@@ -127,7 +131,7 @@ internal sealed class TrayController : IDisposable
         view.ConfigRequested += (_, _) => OpenConfig();
         view.SettingsRequested += async (_, _) => await _settings.OpenAsync();
         view.BackRequested += (_, _) => _settings.Close();
-        view.AppsTabRequested += async (_, _) => await _settings.OpenAsync();
+        view.AppsTabRequested += async (_, _) => await _settings.ShowTabAsync();
         view.LeversTabRequested += (_, _) => _levers.Open();
         view.AddRequested += async (_, _) => await _settings.AddAsync();
         view.RestartElevatedRequested += (_, _) => _queue.RestartElevated();
@@ -161,8 +165,15 @@ internal sealed class TrayController : IDisposable
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
     }
 
-    /// <summary>Apply a mode. While a switch runs, the latest request waits and runs next (see <see cref="SwitchScheduler"/>).</summary>
-    public async Task SwitchAsync(PowerModeKind mode)
+    /// <summary>The user asks for a mode. While a switch runs, the latest request waits and runs next (see <see cref="SwitchScheduler"/>).</summary>
+    public Task SwitchAsync(PowerModeKind mode)
+    {
+        _switchRequestedSinceStart = true;
+        return SwitchCoreAsync(mode);
+    }
+
+    /// <summary>Apply a mode through the queue (the user's request, or the app's own: start, resume).</summary>
+    private async Task SwitchCoreAsync(PowerModeKind mode)
     {
         await _queue.RequestAsync(mode);
         if (!_queue.IsSwitching && !_disposed)
@@ -247,6 +258,19 @@ internal sealed class TrayController : IDisposable
     /// </summary>
     private async Task PromoteTrayIconAsync()
     {
+        try
+        {
+            await PromoteTrayIconOnceAsync();
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            // Not saved in TrayPromotedFor, so the next start tries again.
+            _services.Log.Error(Category, "Tray icon: cannot promote onto the taskbar; trying again on the next start", ex);
+        }
+    }
+
+    private async Task PromoteTrayIconOnceAsync()
+    {
         var exe = AppPaths.ExecutablePath;
         for (var attempt = 1; ; attempt++)
         {
@@ -291,6 +315,12 @@ internal sealed class TrayController : IDisposable
         await Task.Run(_services.TuneFirstRunAsync);
         await Task.Run(_services.RecoverLostModeAsync);
         Refresh();
+        if (_switchRequestedSinceStart)
+        {
+            _services.Log.Write(Category, "Start action skipped: a switch was requested during start-up");
+            return;
+        }
+
 
         // startInGrid: every new start begins without limits; otherwise the saved mode is applied again.
         var state = _services.Switcher.State;
@@ -298,11 +328,11 @@ internal sealed class TrayController : IDisposable
         {
             case StartAction.RestoreGrid:
                 _services.Log.Write(Category, $"Start in Grid: {ModeNames.Display(state.Mode)} was saved; restoring Grid (startInGrid)");
-                await SwitchAsync(PowerModeKind.Grid);
+                await SwitchCoreAsync(PowerModeKind.Grid);
                 break;
             case StartAction.Reapply:
                 _services.Log.Write(Category, $"Re-applying {ModeNames.Display(state.Mode)} on start");
-                await SwitchAsync(state.Mode);
+                await SwitchCoreAsync(state.Mode);
                 break;
             case StartAction.Nothing:
                 break;
@@ -329,8 +359,11 @@ internal sealed class TrayController : IDisposable
         {
             _services.Log.Write(Category, $"Session ending ({e.ReasonSessionEnding}) in {ModeNames.Display(mode)}: restoring Grid");
             var restore = Task.Run(() => _services.Switcher.ShutdownToGridAsync(StartAndShutdown.ShutdownBudget));
-            var done = restore.Wait(StartAndShutdown.ShutdownBudget + ShutdownGrace) && restore.Result;
-            _services.Log.Write(Category, done ? "Shutdown: Grid restored" : "Shutdown: Grid not restored in time; the next start restores it");
+            // The switcher logs what was restored and what stays owed.
+            if (!(restore.Wait(StartAndShutdown.ShutdownBudget + ShutdownGrace) && restore.Result))
+            {
+                _services.Log.Write(Category, "Shutdown: Grid not restored in time; the next start restores it");
+            }
         }
         finally
         {
@@ -621,7 +654,7 @@ internal sealed class TrayController : IDisposable
             }
 
             _services.Log.Write(Category, "Resumed; re-applying");
-            await SwitchAsync(_services.Switcher.State.Mode);
+            await SwitchCoreAsync(_services.Switcher.State.Mode);
         });
     }
 

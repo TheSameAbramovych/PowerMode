@@ -104,7 +104,7 @@ public sealed class FileLogTests
     {
         using var dir = new TempDir();
         var time = new ManualTime(new DateTimeOffset(2026, 11, 9, 10, 0, 0, TimeSpan.Zero));
-        var log = new FileLog(Path.Combine(dir.Path, "logs"), time);
+        var log = new FileLog(Path.Combine(dir.Path, "logs"), time, dir.File("fallback"));
 
         log.Write("lever", "Gpu: Ok - Already set (12 ms)");
         log.Error("lever", "boom", new InvalidOperationException("bad"));
@@ -133,7 +133,7 @@ public sealed class FileLogTests
         File.WriteAllText(blocker, "x");
         var log = new FileLog(blocker, TimeProvider.System, dir.File("fallback"));
 
-        Assert.Equal(0, new FileLog(dir.File("missing"), TimeProvider.System).Prune());
+        Assert.Equal(0, new FileLog(dir.File("missing"), TimeProvider.System, dir.File("fallback")).Prune());
         log.Write("x", "cannot be written under a file");
     }
 }

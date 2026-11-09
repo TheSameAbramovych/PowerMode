@@ -191,6 +191,13 @@ internal static class Kernel32
     [DllImport("kernel32.dll")]
     public static extern IntPtr GetStdHandle(int handle);
 
+    [DllImport("kernel32.dll")]
+    public static extern uint GetConsoleOutputCP();
+
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool FreeConsole();
+
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern Microsoft.Win32.SafeHandles.SafeProcessHandle OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, int processId);
 

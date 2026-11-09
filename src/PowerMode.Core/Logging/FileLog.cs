@@ -27,17 +27,28 @@ public sealed class FileLog : ILog
 
     public const string FallbackFileName = "powermode-fallback.log";
 
+    /// <summary>A fallback file larger than this is deleted by <see cref="Prune"/> (it is also deleted after <see cref="RetentionDays"/>).</summary>
+    public const long MaxFallbackBytes = 5 * 1024 * 1024;
+
+    /// <summary>Another PowerMode process (tray, CLI) appending at the same moment: retry this often before falling back.</summary>
+    public const int WriteAttempts = 5;
+    private const int SharingViolation = unchecked((int)0x80070020);
+    private const int LockViolation = unchecked((int)0x80070021);
+
     private readonly string _directory;
     private readonly TimeProvider _time;
     private readonly string _fallbackDirectory;
+    private readonly Action<TimeSpan> _retryWait;
     private readonly Lock _gate = new();
     private bool _failureReported;
 
     /// <param name="directory">The daily log folder.</param>
     /// <param name="time">The clock.</param>
     /// <param name="fallbackDirectory">Where lines go when the daily file cannot be written; <c>%TEMP%\PowerMode</c> by default.</param>
-    public FileLog(string directory, TimeProvider time, string? fallbackDirectory = null)
+    /// <param name="retryWait">How a write waits before it retries a file another process holds; <see cref="Thread.Sleep(TimeSpan)"/> by default.</param>
+    public FileLog(string directory, TimeProvider time, string? fallbackDirectory = null, Action<TimeSpan>? retryWait = null)
     {
+        _retryWait = retryWait ?? Thread.Sleep;
         _directory = directory;
         _time = time;
         _fallbackDirectory = fallbackDirectory ?? Path.Combine(Path.GetTempPath(), "PowerMode");
@@ -72,7 +83,7 @@ public sealed class FileLog : ILog
                 var now = _time.GetLocalNow();
                 line = string.Create(CultureInfo.InvariantCulture, $"{now:yyyy-MM-dd HH:mm:ss.fff} {line}{Environment.NewLine}");
                 Directory.CreateDirectory(_directory);
-                File.AppendAllText(Path.Combine(_directory, FileNameFor(now)), line);
+                Append(Path.Combine(_directory, FileNameFor(now)), line);
                 return;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -93,6 +104,26 @@ public sealed class FileLog : ILog
         }
     }
 
+    /// <summary>
+    /// Append with the default exclusive-writer sharing; while another process writes the same file at that moment
+    /// (a sharing or lock violation), wait 10, 20, 30, 40 ms and try again. Anything else, or still held, throws.
+    /// </summary>
+    private void Append(string path, string line)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.AppendAllText(path, line);
+                return;
+            }
+            catch (IOException ex) when (attempt < WriteAttempts && ex.HResult is SharingViolation or LockViolation)
+            {
+                _retryWait(TimeSpan.FromMilliseconds(10 * attempt));
+            }
+        }
+    }
+
     private void WriteFallback(string line, string reason)
     {
         try
@@ -107,16 +138,19 @@ public sealed class FileLog : ILog
         }
     }
 
-    /// <summary>Delete log files older than the retention window. Returns how many were deleted.</summary>
+    /// <summary>
+    /// Delete log files older than the retention window, and the fallback file once it is that old or larger than
+    /// <see cref="MaxFallbackBytes"/>. Returns how many were deleted.
+    /// </summary>
     public int Prune()
     {
+        var cutoff = _time.GetLocalNow().Date.AddDays(-RetentionDays);
+        var deleted = PruneFallback(cutoff) ? 1 : 0;
         if (!Directory.Exists(_directory))
         {
-            return 0;
+            return deleted;
         }
 
-        var cutoff = _time.GetLocalNow().Date.AddDays(-RetentionDays);
-        var deleted = 0;
         foreach (var file in Directory.EnumerateFiles(_directory, FilePrefix + "*" + FileExtension))
         {
             var stamp = Path.GetFileNameWithoutExtension(file)[FilePrefix.Length..];
@@ -135,5 +169,24 @@ public sealed class FileLog : ILog
         }
 
         return deleted;
+    }
+
+    private bool PruneFallback(DateTime cutoff)
+    {
+        var file = new FileInfo(FallbackFile);
+        try
+        {
+            if (file.Exists && (file.Length > MaxFallbackBytes || file.LastWriteTime < cutoff))
+            {
+                file.Delete();
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Held by another PowerMode process; try again next start.
+        }
+
+        return false;
     }
 }

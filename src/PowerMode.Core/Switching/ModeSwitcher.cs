@@ -186,6 +186,8 @@ public sealed class ModeSwitcher : IDisposable
             State.Since = _time.GetUtcNow();
             SettleGridRestore(outcome);
             _store.Save(State);
+            var failed = outcome.Results.Where(r => r.Value.IsFailure).Select(r => r.Key.ToString()).ToList();
+            _log.Write(Category, failed.Count == 0 ? "Shutdown: Grid restored" : $"Shutdown: Grid partly restored; {string.Join(", ", failed)} owed for the next start");
             return true;
         }
         finally

@@ -25,9 +25,46 @@ internal static class CliRunner
             return;
         }
 
-        // Redirected to a pipe or file: write UTF-8 so "·" survives.
-        Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true });
-        Console.SetError(new StreamWriter(Console.OpenStandardError(), new UTF8Encoding(false)) { AutoFlush = true });
+        // Redirected to a pipe or file. Open the inherited handles first, then ask the parent's console how it decodes:
+        // UTF-8 (or no console at all: a service, a task, a program reading the pipe) keeps "·" and "≈"; an OEM code
+        // page (Windows PowerShell 5.1 decodes native output with it) gets ASCII look-alikes instead of mojibake.
+        var output = Console.OpenStandardOutput();
+        var error = Console.OpenStandardError();
+        var codePage = 0u;
+        if (Kernel32.AttachConsole(Kernel32.AttachParentProcess))
+        {
+            codePage = Kernel32.GetConsoleOutputCP();
+            Kernel32.FreeConsole();
+        }
+
+        Console.SetOut(Writer(output, codePage));
+        Console.SetError(Writer(error, codePage));
+    }
+
+    private static TextWriter Writer(Stream stream, uint codePage) => ConsoleText.NeedsAscii(codePage)
+        ? new AsciiWriter(new StreamWriter(stream, Encoding.ASCII) { AutoFlush = true })
+        : new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+
+    /// <summary>Maps the report symbols to ASCII (see <see cref="ConsoleText"/>); the ASCII encoder writes "?" for the rest.</summary>
+    private sealed class AsciiWriter(TextWriter inner) : TextWriter
+    {
+        public override Encoding Encoding => inner.Encoding;
+
+        public override void Write(char value) => inner.Write(ConsoleText.Map(value));
+
+        public override void Write(string? value) => inner.Write(value is null ? null : ConsoleText.ToAscii(value));
+
+        public override void Flush() => inner.Flush();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
     }
 
     public static int Help(CliOptions options)

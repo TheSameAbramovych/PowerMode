@@ -185,6 +185,25 @@ public sealed class StartAndShutdownTests
         Assert.True(harness.Switcher.NeedsReapplyOnStart);
         Assert.False(await harness.Switcher.ShutdownToGridAsync(StartAndShutdown.ShutdownBudget));
         Assert.Contains(harness.Log.Lines, l => l.Contains("Shutdown: restoring Grid from Reserve", StringComparison.Ordinal));
+        Assert.Contains(harness.Log.Lines, l => l.EndsWith("Shutdown: Grid restored", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Shutdown_names_the_levers_it_could_not_restore()
+    {
+        var gpu = new FakeLever(LeverKind.Gpu)
+        {
+            OnPlan = c => c.Target.Gpu is null ? LeverPlan.None
+                : c.Target.Mode == PowerModeKind.Grid ? LeverPlan.Of([new LeverAction("refused", _ => throw new LeverException("refused"))])
+                : LeverPlan.Of([new LeverAction("limit", _ => Task.CompletedTask)]),
+            OnCapture = s => s.Gpu = new Model.GpuSnapshot(120_000, 120_000),
+        };
+        using var harness = new SwitcherHarness([gpu]);
+        await harness.Switcher.SwitchAsync(PowerModeKind.Station);
+
+        Assert.True(await harness.Switcher.ShutdownToGridAsync(StartAndShutdown.ShutdownBudget));
+
+        Assert.Contains(harness.Log.Lines, l => l.Contains("Shutdown: Grid partly restored; Gpu owed for the next start", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -218,7 +237,20 @@ public sealed class CpuProfileTests
     [InlineData("AMD Ryzen 5 5600G with Radeon Graphics", 65)]
     [InlineData("Intel(R) Core(TM) i9-13900K", 125)]
     [InlineData("Intel(R) Core(TM) i5-12400F", 65)]
-    [InlineData("11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz", 65)]
+    [InlineData("11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz", 15)]
+    [InlineData("Intel(R) Core(TM) i5-1035G1 CPU @ 1.00GHz", 15)]
+    [InlineData("Intel(R) Core(TM) Ultra 7 155H", 28)]
+    [InlineData("Intel(R) Core(TM) Ultra 7 258V", 17)]
+    [InlineData("Intel(R) Core(TM) Ultra 9 285K", 125)]
+    [InlineData("Intel(R) Core(TM) Ultra 9 275HX", 55)]
+    [InlineData("Intel(R) Core(TM) Ultra 5 225", 65)]
+    [InlineData("Intel(R) Core(TM) 7 150U", 15)]
+    [InlineData("AMD Ryzen AI 9 HX 370 w/ Radeon 890M", 54)]
+    [InlineData("AMD Ryzen AI 7 350 w/ Radeon 860M", 28)]
+    [InlineData("AMD Ryzen 5 5600GE with Radeon Graphics", 35)]
+    [InlineData("AMD Ryzen Threadripper 3970X 32-Core Processor", 280)]
+    [InlineData("12th Gen Intel(R) Core(TM) i7-12700K", 125)]
+    [InlineData("12th Gen Intel(R) Core(TM) i7-1260P", 28)]
     [InlineData("12th Gen Intel(R) Core(TM) i7-12700H", 45)]
     [InlineData("13th Gen Intel(R) Core(TM) i9-13980HX", 55)]
     [InlineData("Intel(R) Core(TM) i5-1235U", 15)]
@@ -403,5 +435,28 @@ public sealed class LeverSettingsSecondsAndClampTests
         Assert.Null(LeverSettings.ClampNote(LeverSetting.GpuLimitW, 90, 90, gpu));
         Assert.Null(LeverSettings.ClampNote(LeverSetting.GpuLimitW, null, null, gpu));
         Assert.Null(LeverSettings.ClampNote(LeverSetting.CpuMaxPercent, 83, 85, gpu));
+    }
+}
+
+public sealed class GpuWithoutLimitTests
+{
+    [Fact]
+    public async Task A_gpu_without_a_controllable_limit_is_skipped_and_never_owed()
+    {
+        var gpu = new FakeLever(LeverKind.Gpu)
+        {
+            OnCapture = s => s.Gpu = null,
+            OnPlan = c => c.Target.Gpu is null ? LeverPlan.None : LeverPlan.Skip("GPU power limit not supported"),
+        };
+        using var harness = new SwitcherHarness([gpu]);
+
+        var outcome = await harness.Switcher.SwitchAsync(PowerModeKind.Station);
+
+        var result = outcome.Results[LeverKind.Gpu];
+        Assert.Equal(LeverStatus.Skipped, result.Status);
+        Assert.False(result.IsFailure);
+        Assert.Equal("GPU power limit not supported", result.Detail);
+        Assert.DoesNotContain(LeverKind.Gpu, harness.Switcher.State.Snapshot!.Missing);
+        Assert.Null(TargetPlanner.Plan(PowerModeKind.Grid, AppConfig.CreateDefault(), harness.Switcher.State.Snapshot).Gpu);
     }
 }

@@ -15,7 +15,7 @@ internal sealed class NvmlProvider : IDisposable
 
     public string Error => _session.Value.Error ?? string.Empty;
 
-    /// <summary>The first NVIDIA GPU: name and the limit range it accepts; null without NVML or on a read error.</summary>
+    /// <summary>The first NVIDIA GPU: name and the limit range it accepts; null without NVML, without a controllable limit, or on a read error.</summary>
     public GpuInfo? Info()
     {
         if (Session is not { } nvml || nvml.DeviceCount() == 0)
@@ -26,8 +26,7 @@ internal sealed class NvmlProvider : IDisposable
         try
         {
             var device = nvml.Device(0);
-            var (min, max) = nvml.Constraints(device);
-            return new GpuInfo(nvml.Name(device), (int)(min / 1000), (int)(max / 1000));
+            return nvml.TryPowerLimit(device, out var limit) ? new GpuInfo(nvml.Name(device), (int)(limit.Min / 1000), (int)(limit.Max / 1000)) : null;
         }
         catch (InvalidOperationException)
         {
@@ -73,6 +72,7 @@ internal sealed class NvmlGpuLever : ILever
 {
     private const string What = "NVML";
     private const uint MilliwattsPerWatt = 1000;
+    private const string NotSupported = "GPU power limit not supported";
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
     private readonly NvmlProvider _nvml;
@@ -81,16 +81,25 @@ internal sealed class NvmlGpuLever : ILever
 
     public LeverKind Kind => LeverKind.Gpu;
 
+    /// <summary>
+    /// The first GPU's limit. No NVML, no NVIDIA GPU, or a GPU without a controllable limit is a legitimately empty
+    /// baseline (Grid then leaves the GPU alone); other read errors throw, so the part is recorded as missing.
+    /// </summary>
     public async Task CaptureAsync(Snapshot snapshot, AppConfig config, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        snapshot.Gpu = await NativeCall.RunAsync(
-            () => _nvml.Session is { } nvml && nvml.DeviceCount() > 0
-                ? new GpuSnapshot(nvml.LimitMilliwatts(nvml.Device(0)), nvml.DefaultLimitMilliwatts(nvml.Device(0)))
-                : null,
-            Timeout,
-            What,
-            cancellationToken).ConfigureAwait(false);
+        snapshot.Gpu = await NativeCall.RunAsync(Capture, Timeout, What, cancellationToken).ConfigureAwait(false);
+    }
+
+    private GpuSnapshot? Capture()
+    {
+        if (_nvml.Session is not { } nvml || nvml.DeviceCount() == 0)
+        {
+            return null;
+        }
+
+        var device = nvml.Device(0);
+        return nvml.TryPowerLimit(device, out var limit) ? new GpuSnapshot(limit.Current, nvml.DefaultLimitMilliwatts(device)) : null;
     }
 
     public async Task<LeverPlan> PlanAsync(ApplyContext context, CancellationToken cancellationToken)
@@ -106,19 +115,24 @@ internal sealed class NvmlGpuLever : ILever
 
     private LeverPlan Plan(GpuTarget target)
     {
-        if (_nvml.Session is not { } nvml)
+        if (_nvml.Session is not { } nvml || nvml.DeviceCount() == 0)
         {
             return LeverPlan.Skip(MachineInfo.NoNvidiaGpu);
         }
 
         var actions = new List<LeverAction>();
+        var controllable = 0;
         for (var i = 0; i < nvml.DeviceCount(); i++)
         {
-            var device = nvml.Device(i);
-            var (min, max) = nvml.Constraints(device);
+            if (!nvml.TryPowerLimit(nvml.Device(i), out var limit))
+            {
+                continue;
+            }
+
+            controllable++;
+            var (min, max, current) = limit;
             var wanted = target.RestoreMilliwatts ?? (uint)target.LimitWatts!.Value * MilliwattsPerWatt;
             wanted = Math.Clamp(wanted, min, max);
-            var current = nvml.LimitMilliwatts(device);
             if (current != wanted)
             {
                 var index = i;
@@ -129,7 +143,7 @@ internal sealed class NvmlGpuLever : ILever
             }
         }
 
-        return LeverPlan.Of(actions);
+        return controllable == 0 ? LeverPlan.Skip(NotSupported) : LeverPlan.Of(actions);
     }
 
     private static bool Set(Nvml nvml, int index, uint milliwatts)

@@ -10,6 +10,9 @@ internal sealed unsafe class Nvml : IDisposable
 {
     public const int Success = 0;
     public const int NoPermission = 4;
+
+    /// <summary>NVML_ERROR_NOT_SUPPORTED: e.g. most laptop GeForce chips have no settable power limit.</summary>
+    public const int NotSupported = 3;
     private const string LibraryName = "nvml.dll";
 
     private readonly IntPtr _library;
@@ -91,13 +94,6 @@ internal sealed unsafe class Nvml : IDisposable
         return value;
     }
 
-    public uint LimitMilliwatts(IntPtr device)
-    {
-        uint value;
-        Check(_getLimit(device, &value), "nvmlDeviceGetPowerManagementLimit");
-        return value;
-    }
-
     public uint DefaultLimitMilliwatts(IntPtr device)
     {
         uint value;
@@ -105,12 +101,31 @@ internal sealed unsafe class Nvml : IDisposable
         return value;
     }
 
-    public (uint Min, uint Max) Constraints(IntPtr device)
+    /// <summary>
+    /// The power limit's range and current value; false when this GPU has no controllable power limit (NVML answers
+    /// <see cref="NotSupported"/>). Any other error throws.
+    /// </summary>
+    public bool TryPowerLimit(IntPtr device, out (uint Min, uint Max, uint Current) limit)
     {
-        uint min;
-        uint max;
-        Check(_getConstraints(device, &min, &max), "nvmlDeviceGetPowerManagementLimitConstraints");
-        return (min, max);
+        uint min = 0;
+        uint max = 0;
+        uint current = 0;
+        var code = _getConstraints(device, &min, &max);
+        if (code != NotSupported)
+        {
+            Check(code, "nvmlDeviceGetPowerManagementLimitConstraints");
+            code = _getLimit(device, &current);
+        }
+
+        if (code == NotSupported)
+        {
+            limit = default;
+            return false;
+        }
+
+        Check(code, "nvmlDeviceGetPowerManagementLimit");
+        limit = (min, max, current);
+        return true;
     }
 
     /// <summary>The product name, e.g. <c>NVIDIA GeForce RTX 3060</c>.</summary>

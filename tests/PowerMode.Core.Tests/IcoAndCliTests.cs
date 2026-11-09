@@ -80,3 +80,34 @@ public sealed class QuitCommandTests
         Assert.Equal(CliCommand.Help, CliOptions.Parse(["--quit", "--help"]).Command);
     }
 }
+
+public sealed class ConsoleTextTests
+{
+    [Fact]
+    public void Report_symbols_become_ascii_look_alikes()
+    {
+        Assert.Equal("PowerMode - Grid - since 09:09", Cli.ConsoleText.ToAscii("PowerMode · Grid · since 09:09"));
+        Assert.Equal("Total ~ 127 W - v 61 W vs Grid - ^ 3 W ... 5-6", Cli.ConsoleText.ToAscii("Total ≈ 127 W · ▼ 61 W vs Grid · ▲ 3 W … 5–6"));
+        Assert.Equal("a-b", Cli.ConsoleText.ToAscii("a—b"));
+        Assert.Equal("Привіт", Cli.ConsoleText.ToAscii("Привіт"));
+    }
+
+    [Theory]
+    [InlineData(0u, false)]
+    [InlineData(65001u, false)]
+    [InlineData(866u, true)]
+    [InlineData(437u, true)]
+    public void Only_a_non_utf8_console_needs_ascii(uint codePage, bool ascii) =>
+        Assert.Equal(ascii, Cli.ConsoleText.NeedsAscii(codePage));
+
+    [Fact]
+    public void The_status_and_dry_run_reports_become_pure_ascii()
+    {
+        var config = Config.AppConfig.CreateDefault();
+        var fixture = Presentation.RenderFixtures.All(config).Single(f => f.FileName == Presentation.RenderFixtures.ReserveFailed);
+
+        var text = Cli.ConsoleText.ToAscii(Presentation.TextReports.Status(fixture.State));
+
+        Assert.All(text, c => Assert.True(c < 128, $"'{c}' (U+{(int)c:X4}) is not ASCII"));
+    }
+}
