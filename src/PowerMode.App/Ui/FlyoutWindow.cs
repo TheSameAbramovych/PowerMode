@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using PowerMode.App.Native;
 using PowerMode.Core;
 using PowerMode.Core.Config;
@@ -34,6 +35,7 @@ internal sealed class FlyoutWindow : Window
         Width = view.Width;
         MaxHeight = MaxFlyoutHeight;
         ShowActivated = true;
+        Icon = BitmapFrame.Create(new Uri("pack://application:,,,/Assets/PowerMode.ico", UriKind.Absolute));
         SetResourceReference(BackgroundProperty, Palette.Background);
         SourceInitialized += (_, _) =>
         {

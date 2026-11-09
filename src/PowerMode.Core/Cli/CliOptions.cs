@@ -9,19 +9,21 @@ public enum CliCommand
     Status,
     DryRun,
     RenderStates,
+    MakeIcon,
     InstallAutostart,
     UninstallAutostart,
     Help,
 }
 
 /// <summary>Parsed command line. <see cref="Error"/> is set when the arguments make no sense.</summary>
-public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, string? Directory = null, string? Error = null)
+public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, string? Directory = null, string? Error = null, string? IconFile = null)
 {
     public const string ModeFlag = "--mode";
     public const string StatusFlag = "--status";
     public const string DryRunFlag = "--dry-run";
     public const string OpenFlag = "--open";
     public const string RenderStatesFlag = "--render-states";
+    public const string MakeIconFlag = "--make-icon";
     public const string InstallAutostartFlag = "--install-autostart";
     public const string UninstallAutostartFlag = "--uninstall-autostart";
     public const string HelpFlag = "--help";
@@ -38,6 +40,7 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
           PowerMode.exe --render-states <dir>    render the flyout states to PNG (fake data)
           PowerMode.exe --install-autostart      start at logon (scheduled task, highest privileges)
           PowerMode.exe --uninstall-autostart    remove that task
+          PowerMode.exe --make-icon <file.ico>   write the application icon (developer tool)
         """;
 
     /// <summary>Commands a second instance hands to the running one over the pipe.</summary>
@@ -50,6 +53,7 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
         ArgumentNullException.ThrowIfNull(args);
         PowerModeKind? mode = null;
         string? directory = null;
+        string? iconFile = null;
         var flags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < args.Count; i++)
         {
@@ -74,6 +78,15 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
                     directory = args[i + 1];
                     i++;
                     break;
+                case MakeIconFlag:
+                    if (i + 1 >= args.Count || args[i + 1].StartsWith("--", StringComparison.Ordinal))
+                    {
+                        return Invalid($"{MakeIconFlag} needs a file");
+                    }
+
+                    iconFile = args[i + 1];
+                    i++;
+                    break;
                 case StatusFlag or DryRunFlag or OpenFlag or InstallAutostartFlag or UninstallAutostartFlag or HelpFlag or "-h" or "/?":
                     flags.Add(arg);
                     break;
@@ -85,6 +98,11 @@ public sealed record CliOptions(CliCommand Command, PowerModeKind? Mode = null, 
         if (flags.Contains(HelpFlag) || flags.Contains("-h") || flags.Contains("/?"))
         {
             return new CliOptions(CliCommand.Help);
+        }
+
+        if (iconFile is not null)
+        {
+            return new CliOptions(CliCommand.MakeIcon, IconFile: iconFile);
         }
 
         if (directory is not null)

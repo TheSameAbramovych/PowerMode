@@ -19,6 +19,11 @@ internal static class Program
             case CliCommand.RenderStates:
                 CliRunner.AttachConsole();
                 return RenderStates(options.Directory!);
+            case CliCommand.MakeIcon:
+                CliRunner.AttachConsole();
+                IconRenderer.SaveAppIcon(options.IconFile!);
+                Console.WriteLine(Path.GetFullPath(options.IconFile!));
+                return CliRunner.ExitOk;
             case CliCommand.Status:
                 CliRunner.AttachConsole();
                 return CliRunner.StatusAsync().GetAwaiter().GetResult();

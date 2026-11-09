@@ -63,6 +63,70 @@ internal static class IconRenderer
         return bitmap;
     }
 
+    /// <summary>Sizes of the application icon (Explorer, taskbar, Alt+Tab, desktop shortcut at every DPI).</summary>
+    public static IReadOnlyList<int> AppIconSizes { get; } = [16, 20, 24, 32, 48, 64, 128, 256];
+
+    private const double TileCornerRatio = 0.22;
+    private const double TileGlyphRatio = 0.64;
+    private static readonly Color TileTop = Color.FromRgb(0x2E, 0x2E, 0x2E);
+    private static readonly Color TileBottom = Color.FromRgb(0x1A, 0x1A, 0x1A);
+    private static readonly Color TileEdge = Color.FromRgb(0x4A, 0x4A, 0x4A);
+    private static readonly Color AppAccent = Color.FromRgb(0x60, 0xCD, 0xFF);
+
+    /// <summary>
+    /// The application icon: the Grid plug (the tray icon's glyph) in the accent colour on a rounded dark tile with a
+    /// 1 px edge, so it reads on light and dark desktops.
+    /// </summary>
+    public static BitmapSource RenderAppIcon(int size)
+    {
+        var tile = new LinearGradientBrush(TileTop, TileBottom, 90);
+        tile.Freeze();
+        var edge = new Pen(new SolidColorBrush(TileEdge), Math.Max(1, size / 64.0));
+        edge.Freeze();
+        var accent = new SolidColorBrush(AppAccent);
+        accent.Freeze();
+
+        var geometry = GlyphGeometry(Glyphs.Plug);
+        var bounds = geometry.Bounds;
+        var scale = size * TileGlyphRatio / Math.Max(bounds.Width, bounds.Height);
+        var transform = new TransformGroup();
+        transform.Children.Add(new TranslateTransform(-bounds.X - bounds.Width / 2, -bounds.Y - bounds.Height / 2));
+        transform.Children.Add(new ScaleTransform(scale, scale));
+        transform.Children.Add(new TranslateTransform(size / 2.0, size / 2.0));
+        geometry.Transform = transform;
+
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+        {
+            var half = edge.Thickness / 2;
+            var radius = size * TileCornerRatio;
+            context.DrawRoundedRectangle(tile, edge, new Rect(half, half, size - edge.Thickness, size - edge.Thickness), radius, radius);
+            context.DrawGeometry(accent, null, geometry);
+        }
+
+        var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
+    /// <summary><c>--make-icon</c>: write the application icon with every size in <see cref="AppIconSizes"/>.</summary>
+    public static void SaveAppIcon(string path)
+    {
+        var images = AppIconSizes.Select(size => new Core.Presentation.IcoImage(size, EncodePng(RenderAppIcon(size)))).ToList();
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        File.WriteAllBytes(path, Core.Presentation.IcoWriter.Write(images));
+    }
+
+    private static byte[] EncodePng(BitmapSource source)
+    {
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(source));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return stream.ToArray();
+    }
+
     /// <summary>A GDI+ icon for NotifyIcon. The caller owns <paramref name="handle"/> and must DestroyIcon it.</summary>
     public static System.Drawing.Icon ToIcon(BitmapSource source, out IntPtr handle)
     {
