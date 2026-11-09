@@ -10,6 +10,17 @@ public static class FriendlyNames
         ["msedgewebview2"] = "Edge WebView2",
         ["PhoneExperienceHost"] = "Phone Link",
         ["CrossDeviceService"] = "Cross Device",
+        ["EpicGamesLauncher"] = "Epic Games Launcher",
+        ["Battle.net"] = "Battle.net",
+        ["chrome"] = "Chrome",
+        ["msedge"] = "Edge",
+        ["Code"] = "VS Code",
+        ["idea64"] = "IntelliJ IDEA",
+        ["rider64"] = "Rider",
+        ["webstorm64"] = "WebStorm",
+        ["Zoom"] = "Zoom",
+        ["spotify"] = "Spotify",
+        ["discord"] = "Discord",
     };
 
     private static readonly Dictionary<string, string> Services = new(StringComparer.OrdinalIgnoreCase)

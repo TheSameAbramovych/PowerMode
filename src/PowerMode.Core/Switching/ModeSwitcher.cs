@@ -156,6 +156,35 @@ public sealed class ModeSwitcher : IDisposable
     }
 
     /// <summary>
+    /// After a change on the Apps settings page (the config already holds the new lists): re-apply the levers that
+    /// <paramref name="leversFor"/> returns for the current mode (see <see cref="Settings.AppSettings.ImmediateLevers"/>).
+    /// The mode is read once any running switch, which planned with the old lists, has finished. Null when nothing
+    /// was re-applied.
+    /// </summary>
+    public async Task<SwitchOutcome?> ApplySettingChangeAsync(Func<PowerModeKind, IReadOnlyList<LeverKind>> leversFor, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(leversFor);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var only = leversFor(State.Mode);
+            if (only.Count == 0)
+            {
+                return null;
+            }
+
+            _log.Write(Category, $"Apps settings changed; re-applying {string.Join(", ", only)}");
+            var outcome = await ApplyAsync(State.Mode, _config(), only, cancellationToken).ConfigureAwait(false);
+            _store.Save(State);
+            return outcome;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
     /// The saved state was lost (state.json unreadable or deleted) while a PowerMode scheme is still active, so the PC
     /// is still in that saving mode. Adopt it: start-up re-applies it, and Grid later leaves the PowerMode scheme for
     /// the fallback scheme. The rest of the baseline is gone; Grid leaves those levers as they are.

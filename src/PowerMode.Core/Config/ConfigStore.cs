@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PowerMode.Core.Logging;
 
 namespace PowerMode.Core.Config;
@@ -15,6 +16,8 @@ public sealed class ConfigStore : IDisposable
     private readonly ILog _log;
     private FileSystemWatcher? _watcher;
     private Timer? _debounceTimer;
+    private readonly Lock _gate = new();
+    private string? _lastWritten;
 
     public ConfigStore(string path, ILog log)
     {
@@ -97,16 +100,84 @@ public sealed class ConfigStore : IDisposable
     {
         try
         {
-            if (Load())
+            lock (_gate)
             {
-                _log.Write(Category, "Reloaded config");
-                Changed?.Invoke(this, EventArgs.Empty);
+                if (IsOwnWrite() || !Load())
+                {
+                    return;
+                }
             }
+
+            _log.Write(Category, "Reloaded config");
+            Changed?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _log.Error(Category, "Config reload failed", ex);
         }
+    }
+
+    /// <summary>The file still holds exactly what <see cref="UpdateModeApps"/> wrote: the watcher saw our own write, nothing to reload.</summary>
+    private bool IsOwnWrite()
+    {
+        try
+        {
+            return _lastWritten is not null && File.Exists(_path) && string.Equals(File.ReadAllText(_path), _lastWritten, StringComparison.Ordinal);
+        }
+        catch (IOException)
+        {
+            // Being written by someone else right now; Load decides.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Change the app lists and Wallpaper Engine of one saving mode. config.json is rewritten atomically with only
+    /// those keys changed (every other key stays), and <see cref="Current"/> is the result at once. The watcher's
+    /// event for this write does not reload or raise <see cref="Changed"/>. False, and nothing written, when the file
+    /// on disk is not a valid config right now (the user is editing it) or cannot be written.
+    /// </summary>
+    public bool UpdateModeApps(PowerModeKind mode, Action<ModeConfig> change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        lock (_gate)
+        {
+            var copy = ConfigLoader.Parse(ConfigLoader.Serialize(Current)).Config!;
+            var values = copy.Modes.For(mode) ?? throw new ArgumentOutOfRangeException(nameof(mode), mode, "Only Station and Reserve have app lists.");
+            change(values);
+            try
+            {
+                var text = File.Exists(_path) ? File.ReadAllText(_path) : ConfigLoader.Serialize(Current);
+                var edited = ConfigEditor.SetModeApps(text, mode, values);
+                var parsed = ConfigLoader.Parse(edited);
+                if (!parsed.IsValid)
+                {
+                    _log.Write(Category, $"Not saving the {ModeNames.Display(mode)} apps: config.json is invalid now: " + string.Join("; ", parsed.Errors));
+                    return false;
+                }
+
+                WriteAtomically(edited);
+                _lastWritten = edited;
+                Current = parsed.Config!;
+                _log.Write(Category, $"Saved {ModeNames.Display(mode)} apps: close [{string.Join(", ", values.CloseApps)}], "
+                    + $"efficiency [{string.Join(", ", values.EfficiencyApps)}], pause Wallpaper Engine {(values.PauseWallpaperEngine ? "on" : "off")}");
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                _log.Error(Category, $"Cannot save the {ModeNames.Display(mode)} apps to {_path}", ex);
+                return false;
+            }
+        }
+    }
+
+    /// <summary>Write next to the file, then replace it in one rename: a reader never sees half a file.</summary>
+    private void WriteAtomically(string text)
+    {
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_path)!);
+        var temp = _path + ".tmp";
+        File.WriteAllText(temp, text);
+        File.Move(temp, _path, overwrite: true);
     }
 
     public void Dispose()
