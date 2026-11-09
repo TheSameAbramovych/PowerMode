@@ -59,7 +59,13 @@ Semantics:
   reboot or crash during a blackout — the power scheme survives anyway, the GPU limit does not). Also
   re-apply on resume from hibernate/sleep (`SystemEvents.PowerModeChanged` Resume) and on
   `SystemEvents.DisplaySettingsChanged` only for brightness/refresh (debounced, and only if the value
-  drifted from the target; never fight the user more than once per minute).
+  drifted from the target; never fight the user more than once per minute). Refresh rates within 1 Hz
+  are the same rate (60 Hz reads back as 59 Hz), for "already set", drift and the live column.
+- **Brightness after a mode change.** The monitor re-syncs for 1–3 s after a new display mode and does
+  not answer DDC/CI: brightness runs after the refresh rate, waits 2 s when the refresh rate changed in
+  the same apply, then retries up to 6 times 1 s apart (re-enumerating the monitors every time) before it
+  reports the failure. A switch that still left brightness failed (also an unfinished Grid restore) gets
+  one more display check 2 s after the switch.
 - **Partial failure** is normal (not elevated, monitor asleep, Docker not installed): the mode is still
   "applied"; the failed lever's row shows ⚠ with the reason; a "Restart as administrator" button appears
   when the only reason is elevation.

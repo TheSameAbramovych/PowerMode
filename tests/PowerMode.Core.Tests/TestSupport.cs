@@ -63,6 +63,8 @@ internal sealed class FakeLever(LeverKind kind) : ILever
 
     public LeverKind? RunsAfter { get; init; }
 
+    public LeverRetry? Retry { get; init; }
+
     public Action<Snapshot>? OnCapture { get; init; }
 
     public Func<ApplyContext, LeverPlan> OnPlan { get; init; } = _ => LeverPlan.None;
@@ -202,7 +204,8 @@ internal sealed class SwitcherHarness : IDisposable
         Config = config ?? AppConfig.CreateDefault();
         Store = new StateStore(Dir.File("state.json"), Log);
         Elevated = elevated;
-        Switcher = new ModeSwitcher(levers, Store, () => Config, () => Elevated, Time, Log);
+        Delay = new FakeDelay(Time);
+        Switcher = new ModeSwitcher(levers, Store, () => Config, () => Elevated, Time, Log, new LeverExecutor(Log, delay: Delay.Wait));
     }
 
     public TempDir Dir { get; } = new();
@@ -210,6 +213,9 @@ internal sealed class SwitcherHarness : IDisposable
     public ListLog Log { get; } = new();
 
     public ManualTime Time { get; } = new(new DateTimeOffset(2026, 11, 9, 12, 0, 0, TimeSpan.Zero));
+
+    /// <summary>Retry waits return at once and advance <see cref="Time"/>.</summary>
+    public FakeDelay Delay { get; }
 
     public AppConfig Config { get; set; }
 
@@ -226,4 +232,95 @@ internal sealed class SwitcherHarness : IDisposable
         Switcher.Dispose();
         Dir.Dispose();
     }
+}
+
+/// <summary>A delay that returns at once, records what was asked and advances the clock by it.</summary>
+internal sealed class FakeDelay(ManualTime time)
+{
+    public List<TimeSpan> Waits { get; } = [];
+
+    public Task Wait(TimeSpan span, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (Waits)
+        {
+            Waits.Add(span);
+        }
+
+        time.Advance(span);
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// A display and its monitor: a new display mode makes the monitor re-sync, and until <see cref="AnswersFrom"/> it does
+/// not answer DDC/CI (the brightness plan reports it unavailable), like the owner's monitor after 200 Hz -> 60 Hz.
+/// </summary>
+internal sealed class ResyncingMonitor(ManualTime time)
+{
+    public const string NoMonitor = "No monitor answered over DDC/CI (asleep or DDC/CI off)";
+
+    public static readonly LeverRetry Retry = new(TimeSpan.FromSeconds(2), 6, TimeSpan.FromSeconds(1));
+
+    public int RefreshHz { get; set; } = 200;
+
+    public int Brightness { get; set; } = 80;
+
+    /// <summary>How long the monitor stays silent after a mode change.</summary>
+    public TimeSpan Resync { get; set; } = TimeSpan.FromSeconds(2.5);
+
+    public DateTimeOffset AnswersFrom { get; private set; } = DateTimeOffset.MinValue;
+
+    public int BrightnessPlans { get; private set; }
+
+    public FakeLever Display() => new(LeverKind.DisplayMode)
+    {
+        OnCapture = s => s.Displays = [new DisplayModeInfo(@"\.\DISPLAY1", 2560, 1440, RefreshHz, 32)],
+        OnPlan = context =>
+        {
+            if (context.Target.Refresh is not { } target)
+            {
+                return LeverPlan.None;
+            }
+
+            var hz = target.RefreshHz ?? target.Restore.Single().RefreshHz;
+            return RefreshRates.Same(hz, RefreshHz)
+                ? LeverPlan.Done
+                : LeverPlan.Of([new LeverAction($"{RefreshHz} Hz -> {hz} Hz", _ =>
+                {
+                    RefreshHz = hz;
+                    AnswersFrom = time.Now + Resync;
+                    return Task.CompletedTask;
+                })]);
+        },
+    };
+
+    public FakeLever Monitor() => new(LeverKind.Brightness)
+    {
+        RunsAfter = LeverKind.DisplayMode,
+        Retry = Retry,
+        OnCapture = s => s.Monitors = [new MonitorLevel(@"\.\DISPLAY1#0", Brightness, 50)],
+        OnPlan = context =>
+        {
+            BrightnessPlans++;
+            if (context.Target.Monitor is not { } target)
+            {
+                return LeverPlan.None;
+            }
+
+            if (time.Now < AnswersFrom)
+            {
+                return LeverPlan.Fail(NoMonitor);
+            }
+
+            var wanted = target.BrightnessPercent ?? target.Restore.Single().Brightness;
+            return wanted == Brightness
+                ? LeverPlan.Done
+                : LeverPlan.Of([new LeverAction($"brightness {Brightness} -> {wanted}", _ =>
+                {
+                    Brightness = wanted;
+                    return Task.CompletedTask;
+                })]);
+        },
+    };
 }

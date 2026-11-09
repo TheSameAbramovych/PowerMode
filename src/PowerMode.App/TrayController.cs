@@ -156,6 +156,11 @@ internal sealed class TrayController : IDisposable
             var target = TargetPlanner.Plan(mode, _services.Config.Current, _services.Switcher.State.Snapshot, _services.Switcher.State.OptionsFor(mode));
             var (title, text) = FlyoutStateBuilder.Toast(target, outcome.Results);
             _tray.Toast(title, text);
+            if (_services.Switcher.OwesRetry(DisplayLevers))
+            {
+                // The monitor still did not answer: try once more when the display has settled.
+                RestartDisplayCheck();
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -382,26 +387,38 @@ internal sealed class TrayController : IDisposable
         });
     }
 
-    private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>
-        _app.Dispatcher.BeginInvoke(() =>
-        {
-            _displayDebounce.Stop();
-            _displayDebounce.Start();
-        });
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e) => _app.Dispatcher.BeginInvoke(RestartDisplayCheck);
 
-    /// <summary>Brightness/refresh drifted (another app, a reconnect): correct it, but never more than once a minute.</summary>
+    private void RestartDisplayCheck()
+    {
+        _displayDebounce.Stop();
+        _displayDebounce.Start();
+    }
+
+    /// <summary>
+    /// Brightness/refresh drifted (another app, a reconnect) or a switch left them failed (the monitor did not answer
+    /// while it re-synced; also an unfinished Grid restore): correct it, but never more than once a minute.
+    /// </summary>
     private async Task OnDisplaySettledAsync()
     {
         _displayDebounce.Stop();
-        if (_queue.IsSwitching || _services.Switcher.State.Mode == PowerModeKind.Grid || !_services.Config.Current.ReapplyOnDisplayChange)
+        if (_queue.IsSwitching)
+        {
+            // The switch itself changed the display mode: check once it has finished.
+            RestartDisplayCheck();
+            return;
+        }
+
+        if (!_services.Switcher.WantsDisplayCheck(DisplayLevers, _services.Config.Current.ReapplyOnDisplayChange))
         {
             return;
         }
 
         if (await Task.Run(() => _services.Switcher.HasDriftedAsync(DisplayLevers)) && _driftGuard.TryEnter())
         {
-            _services.Log.Write(Category, "Display settings drifted; re-applying refresh rate and brightness");
+            _services.Log.Write(Category, "Display levers drifted or failed; re-applying refresh rate and brightness");
             await Task.Run(() => _services.Switcher.ReapplyAsync(DisplayLevers));
+            _services.Live.Invalidate();
             Refresh();
         }
     }

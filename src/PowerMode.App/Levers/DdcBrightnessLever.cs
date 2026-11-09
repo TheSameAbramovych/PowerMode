@@ -19,6 +19,12 @@ internal sealed class DdcBrightnessLever : ILever
     public LeverKind? RunsAfter => LeverKind.DisplayMode;
 
     /// <summary>
+    /// After a mode change the monitor re-syncs for 1-3 s and answers no DDC/CI: wait 2 s, then retry up to 6 times a
+    /// second apart. Each plan enumerates the physical monitors again (handles go stale across a mode change).
+    /// </summary>
+    public LeverRetry Retry { get; } = new(TimeSpan.FromSeconds(2), 6, RetryDelay);
+
+    /// <summary>
     /// Record brightness and contrast. No monitor at all is a legitimately empty baseline; monitors that are there but
     /// do not answer (DDC/CI reads fail for a moment) are retried once and otherwise make the capture inconclusive.
     /// </summary>

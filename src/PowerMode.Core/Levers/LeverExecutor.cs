@@ -20,11 +20,16 @@ public sealed class LeverExecutor
 
     private readonly ILog _log;
     private readonly TimeSpan _actionTimeout;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
 
-    public LeverExecutor(ILog log, TimeSpan? actionTimeout = null)
+    /// <param name="log">The app log.</param>
+    /// <param name="actionTimeout">Longest one action may take.</param>
+    /// <param name="delay">How <see cref="LeverRetry"/> waits; <see cref="Task.Delay(TimeSpan, CancellationToken)"/> by default.</param>
+    public LeverExecutor(ILog log, TimeSpan? actionTimeout = null, Func<TimeSpan, CancellationToken, Task>? delay = null)
     {
         _log = log;
         _actionTimeout = actionTimeout ?? DefaultActionTimeout;
+        _delay = delay ?? Task.Delay;
     }
 
     /// <summary>Capture one lever's part of the baseline. False when the read failed or was inconclusive (the lever threw).</summary>
@@ -59,7 +64,14 @@ public sealed class LeverExecutor
         }
     }
 
-    public async Task<LeverResult> ApplyAsync(ILever lever, ApplyContext context, CancellationToken cancellationToken)
+    public Task<LeverResult> ApplyAsync(ILever lever, ApplyContext context, CancellationToken cancellationToken) =>
+        ApplyAsync(lever, context, predecessorChanged: false, cancellationToken);
+
+    /// <param name="lever">The lever to apply.</param>
+    /// <param name="context">Target, state and elevation.</param>
+    /// <param name="predecessorChanged">The lever's <see cref="ILever.RunsAfter"/> predecessor changed the machine in this apply.</param>
+    /// <param name="cancellationToken">Cancels the apply.</param>
+    public async Task<LeverResult> ApplyAsync(ILever lever, ApplyContext context, bool predecessorChanged, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(lever);
         ArgumentNullException.ThrowIfNull(context);
@@ -68,7 +80,7 @@ public sealed class LeverExecutor
         LeverResult result;
         try
         {
-            result = await RunAsync(lever, context, cancellationToken).ConfigureAwait(false);
+            result = await RunAsync(lever, context, predecessorChanged, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -80,9 +92,9 @@ public sealed class LeverExecutor
         return result;
     }
 
-    private async Task<LeverResult> RunAsync(ILever lever, ApplyContext context, CancellationToken cancellationToken)
+    private async Task<LeverResult> RunAsync(ILever lever, ApplyContext context, bool predecessorChanged, CancellationToken cancellationToken)
     {
-        var plan = await PlanAsync(lever, context, cancellationToken).ConfigureAwait(false);
+        var plan = await PlanWithRetryAsync(lever, context, predecessorChanged, cancellationToken).ConfigureAwait(false);
         if (plan.Unavailable is { } unavailable)
         {
             return LeverResult.Failed(unavailable) with { Permanent = plan.Permanent };
@@ -120,13 +132,41 @@ public sealed class LeverExecutor
             }
         }
 
+        var changed = done.Count > 0;
         if (failures.Count == 0)
         {
-            return LeverResult.Ok(string.Join(Separator, done));
+            return LeverResult.Ok(string.Join(Separator, done)) with { Changed = changed };
         }
 
         var reason = string.Join(Separator, failures.Select(f => f.Reason).Distinct(StringComparer.Ordinal));
-        return LeverResult.Failed(reason, failures.All(f => f.NeedsElevation));
+        return LeverResult.Failed(reason, failures.All(f => f.NeedsElevation)) with { Changed = changed };
+    }
+
+    /// <summary>Plan once, or per the lever's <see cref="LeverRetry"/>: settle after a predecessor's change, retry while unavailable.</summary>
+    private async Task<LeverPlan> PlanWithRetryAsync(ILever lever, ApplyContext context, bool predecessorChanged, CancellationToken cancellationToken)
+    {
+        if (lever.Retry is not { } retry)
+        {
+            return await PlanAsync(lever, context, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (predecessorChanged)
+        {
+            _log.Write(Category, $"{lever.Kind}: {lever.RunsAfter} changed, waiting {Ms(retry.Settle)} for it to settle");
+            await _delay(retry.Settle, cancellationToken).ConfigureAwait(false);
+        }
+
+        for (var attempt = 1; ; attempt++)
+        {
+            var plan = await PlanAsync(lever, context, cancellationToken).ConfigureAwait(false);
+            if (plan.Unavailable is not { } reason || plan.Permanent || attempt > retry.Retries)
+            {
+                return plan;
+            }
+
+            _log.Write(Category, $"{lever.Kind}: {reason}; retry {attempt} of {retry.Retries} in {Ms(retry.Delay)}");
+            await _delay(retry.Delay, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task<(string Reason, bool NeedsElevation)?> ExecuteAsync(LeverKind kind, LeverAction action, CancellationToken cancellationToken)
@@ -157,5 +197,7 @@ public sealed class LeverExecutor
         }
     }
 
-    private static string Ms(Stopwatch watch) => watch.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture) + " ms";
+    private static string Ms(Stopwatch watch) => Ms(watch.Elapsed);
+
+    private static string Ms(TimeSpan span) => ((long)span.TotalMilliseconds).ToString(CultureInfo.InvariantCulture) + " ms";
 }

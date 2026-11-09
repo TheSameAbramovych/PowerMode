@@ -117,6 +117,12 @@ public sealed class ModeSwitcher : IDisposable
         try
         {
             var outcome = await ApplyAsync(State.Mode, _config(), only, cancellationToken).ConfigureAwait(false);
+            if (State.Mode == PowerModeKind.Grid)
+            {
+                // A retried part of the Grid restore (brightness after the monitor answered again) is no longer owed.
+                SettleGridRestore(outcome);
+            }
+
             _store.Save(State);
             return outcome;
         }
@@ -188,10 +194,32 @@ public sealed class ModeSwitcher : IDisposable
         }
     }
 
-    /// <summary>True when any of these levers is no longer at the current mode's target (read-only).</summary>
+    /// <summary>The last apply of one of these levers failed in a way that may go away by itself (see <see cref="LeverResult.IsRetryable"/>).</summary>
+    public bool OwesRetry(IReadOnlyCollection<LeverKind> levers)
+    {
+        ArgumentNullException.ThrowIfNull(levers);
+        return State.LastResults.Any(r => levers.Contains(r.Key) && r.Value.IsRetryable);
+    }
+
+    /// <summary>
+    /// Whether a display change (or a switch that left a display lever failed) should check the display levers: never
+    /// in Grid with nothing left to restore; a retry that is owed always; drift only when the config asks for it.
+    /// </summary>
+    public bool WantsDisplayCheck(IReadOnlyCollection<LeverKind> levers, bool reapplyOnDisplayChange) =>
+        NeedsReapplyOnStart && (reapplyOnDisplayChange || OwesRetry(levers));
+
+    /// <summary>
+    /// True when any of these levers is no longer at the current mode's target, or its last apply failed and is worth
+    /// retrying (a monitor that did not answer right after a mode change). Read-only.
+    /// </summary>
     public async Task<bool> HasDriftedAsync(IReadOnlyCollection<LeverKind> levers, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(levers);
+        if (OwesRetry(levers))
+        {
+            return true;
+        }
+
         var context = Context(State.Mode, _config(), State.Snapshot);
         var blocked = Blocked(context.Target, State.Snapshot);
         foreach (var lever in _levers.Where(l => levers.Contains(l.Kind) && !blocked.Contains(l.Kind)))
@@ -399,16 +427,18 @@ public sealed class ModeSwitcher : IDisposable
 
     private async Task<LeverResult> RunLeverAsync(ILever lever, ApplyContext context, Task<LeverResult>? predecessor, IReadOnlySet<LeverKind> kinds, CancellationToken cancellationToken)
     {
+        var predecessorChanged = false;
         if (predecessor is not null)
         {
-            await predecessor.ConfigureAwait(false);
+            // E.g. a new display mode: the monitor re-syncs and does not answer DDC/CI for a moment.
+            predecessorChanged = (await predecessor.ConfigureAwait(false)).Changed;
         }
         else
         {
             await Task.Yield();
         }
 
-        var result = await _executor.ApplyAsync(lever, context, cancellationToken).ConfigureAwait(false);
+        var result = await _executor.ApplyAsync(lever, context, predecessorChanged, cancellationToken).ConfigureAwait(false);
         Progress?.Invoke(this, new SwitchProgress(SwitchPhase.LeverFinished, context.Target.Mode, kinds, lever.Kind, result));
         return result;
     }

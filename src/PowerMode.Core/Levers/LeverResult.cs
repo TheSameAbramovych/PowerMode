@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PowerMode.Core.Levers;
 
 public enum LeverStatus
@@ -28,6 +30,17 @@ public sealed record LeverResult(LeverStatus Status, string Detail, bool NeedsEl
     public static LeverResult Skipped(string reason) => new(LeverStatus.Skipped, reason);
 
     public bool IsFailure => Status == LeverStatus.Failed;
+
+    /// <summary>At least one action ran: the machine was changed (a display mode set, so the monitor re-syncs). Not persisted.</summary>
+    [JsonIgnore]
+    public bool Changed { get; init; }
+
+    /// <summary>
+    /// A failure that may go away by itself (a monitor that did not answer over DDC/CI while it re-synced), so it is
+    /// worth applying again: not permanent, not for lack of rights, not a lever held back for a missing baseline.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsRetryable => IsFailure && !Permanent && !NeedsElevation && Detail != BaselineNotCaptured;
 }
 
 /// <summary>Thrown inside a <see cref="LeverAction"/> to report a readable failure reason.</summary>

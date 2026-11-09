@@ -25,6 +25,14 @@ public sealed record LeverPlan(IReadOnlyList<LeverAction> Actions, string? Unava
 public sealed record ApplyContext(TargetState Target, PersistedState State, bool IsElevated);
 
 /// <summary>
+/// For a device that is briefly unreachable (a monitor re-syncing after a display-mode change). When the lever's
+/// <see cref="ILever.RunsAfter"/> predecessor changed something in the same apply, wait <see cref="Settle"/> first;
+/// then, while the plan reports the device unavailable (not permanently), plan again up to <see cref="Retries"/>
+/// times, <see cref="Delay"/> apart. Every plan reads the device afresh.
+/// </summary>
+public sealed record LeverRetry(TimeSpan Settle, int Retries, TimeSpan Delay);
+
+/// <summary>
 /// A lever reads the current machine state and plans actions toward a <see cref="TargetState"/>.
 /// Implementations live in the App; <see cref="LeverExecutor"/> guarantees logging, timing, elevation
 /// gating and that nothing ever throws out of an apply.
@@ -35,6 +43,9 @@ public interface ILever
 
     /// <summary>Another lever that must finish before this one starts (e.g. brightness after the display mode).</summary>
     LeverKind? RunsAfter => null;
+
+    /// <summary>How to wait for a briefly unreachable device; null = plan once.</summary>
+    LeverRetry? Retry => null;
 
     /// <summary>
     /// Record this lever's part of the baseline (read-only). Throw when the read failed or was inconclusive: the part
