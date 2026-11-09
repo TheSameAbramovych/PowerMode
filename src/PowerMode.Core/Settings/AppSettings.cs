@@ -34,8 +34,11 @@ public sealed record AppRow(string Name, AppChoice Station, AppChoice Reserve)
     };
 }
 
-/// <summary>The Apps settings page: app rows plus Wallpaper Engine (Keep / Pause) per saving mode.</summary>
-public sealed record AppSettingsPage(IReadOnlyList<AppRow> Rows, bool PauseWallpaperStation, bool PauseWallpaperReserve)
+/// <summary>
+/// The Apps settings page: app rows plus Wallpaper Engine (Keep / Pause) per saving mode; that row is shown only when
+/// <see cref="WallpaperEngineInstalled"/>, like the lever itself.
+/// </summary>
+public sealed record AppSettingsPage(IReadOnlyList<AppRow> Rows, bool PauseWallpaperStation, bool PauseWallpaperReserve, bool WallpaperEngineInstalled = true)
 {
     public bool PausesWallpaper(PowerModeKind mode) => mode switch
     {
@@ -216,4 +219,21 @@ public sealed record SettingsFeedback(string? Saved, string? Error)
 
     /// <summary>The input is fine again.</summary>
     public SettingsFeedback Valid() => this with { Error = null };
+
+    /// <summary>
+    /// The saved change was applied at once but a lever failed: the reasons, for the warning line; null when nothing
+    /// was applied or everything held.
+    /// </summary>
+    public static string? NotAppliedMessage(Switching.SwitchOutcome? outcome)
+    {
+        if (outcome is null || outcome.FailedCount == 0)
+        {
+            return null;
+        }
+
+        return NotAppliedMessage(string.Join("; ", outcome.Results.Values.Where(r => r.IsFailure).Select(r => r.Detail).Distinct(StringComparer.Ordinal)));
+    }
+
+    /// <summary>The saved change could not be applied at once, for <paramref name="reason"/>.</summary>
+    public static string NotAppliedMessage(string reason) => $"Saved, but not applied now: {reason}. The main page shows the lever.";
 }

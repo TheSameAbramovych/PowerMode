@@ -8,7 +8,7 @@ using PowerMode.Core.State;
 
 namespace PowerMode.Core.Presentation;
 
-/// <summary>A flyout state to render; with <see cref="Settings"/> the Apps settings page is shown instead of the lever table, with <see cref="Feedback"/> on it; <see cref="CalibrationReading"/> shows the power card's calibration form with that text; <see cref="Levers"/> shows the Levers page for <see cref="Machine"/>.</summary>
+/// <summary>A flyout state to render; with <see cref="Settings"/> the Apps settings page is shown instead of the lever table, with <see cref="Feedback"/> on it; <see cref="CalibrationReading"/> shows the power card's calibration form with that text; <see cref="Levers"/> shows the Levers page for <see cref="Machine"/>; <see cref="MaxHeight"/> renders it in a flyout no taller than that (DIP) instead of this PC's work area.</summary>
 public sealed record RenderFixture(
     string FileName,
     FlyoutState State,
@@ -17,7 +17,8 @@ public sealed record RenderFixture(
     SettingsFeedback? Feedback = null,
     string? CalibrationReading = null,
     IReadOnlyList<LeverSettingRow>? Levers = null,
-    MachineInfo? Machine = null);
+    MachineInfo? Machine = null,
+    double? MaxHeight = null);
 
 /// <summary>Fake but realistic flyout states for <c>--render-states</c>. Built from the default config; touches nothing.</summary>
 public static class RenderFixtures
@@ -38,6 +39,12 @@ public static class RenderFixtures
     public const string StationTwoMonitors = "station-two-monitors.png";
     public const string SettingsLevers = "settings-levers.png";
     public const string SettingsLeversLight = "settings-levers-light.png";
+    public const string SettingsLeversShort = "settings-levers-648.png";
+    public const string SettingsAppsNoWallpaper = "settings-apps-no-wallpaper.png";
+    public const string ReserveFailedLongStatus = "reserve-failed-long-status.png";
+
+    /// <summary>The flyout's height limit on a 1920 × 1080 screen at 150 % (1080 / 1.5 less the taskbar and margin).</summary>
+    public const double ShortScreenHeight = 648;
 
     /// <summary>An app with a long name, closed in Reserve, so the settings render shows how such a name wraps.</summary>
     public const string LongName = "Adobe Creative Cloud Experience";
@@ -51,6 +58,9 @@ public static class RenderFixtures
 
     /// <summary>A calibration made this morning (the hero fixtures show "Calibrated 10:31").</summary>
     public static readonly PowerCalibration Calibration = new(14, new DateTimeOffset(2026, 11, 9, 10, 31, 0, TimeSpan.FromHours(2)));
+
+    /// <summary>A calibration from another day, so the status line's note carries the date.</summary>
+    public static readonly PowerCalibration OldCalibration = new(14, new DateTimeOffset(2026, 11, 3, 10, 31, 0, TimeSpan.FromHours(2)));
 
     /// <summary>The owner's PC as the Levers page shows it (two monitors, the NVIDIA card's 60–132 W range).</summary>
     public static readonly MachineInfo OwnerPc = new(
@@ -103,6 +113,18 @@ public static class RenderFixtures
             new(SettingsLevers, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false, Feedback: SettingsFeedback.SavedAt(Now), Levers: LeverSettings.Build(config, OwnerPc), Machine: OwnerPc),
             new(SettingsLeversLight, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), true, Levers: LeverSettings.Build(config, OwnerPc), Machine: OwnerPc),
             new(StationTwoMonitors, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive with { Monitors = [new MonitorLive("M27Q2", 35, 59), new MonitorLive("T24i-30", 35, 60)] }, isElevated: true), false),
+            new(SettingsLeversShort, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false, Feedback: SettingsFeedback.SavedAt(Now), Levers: LeverSettings.Build(config, OwnerPc), Machine: OwnerPc, MaxHeight: ShortScreenHeight),
+            new(SettingsAppsNoWallpaper, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false, SettingsPage(config) with { WallpaperEngineInstalled = false }),
+            new(ReserveFailedLongStatus, Build(
+                config,
+                PowerModeKind.Reserve,
+                snapshot,
+                r => WithElevationFailures(r, LeverKind.Gpu, LeverKind.Services),
+                [],
+                reserveLive with { GpuWatts = 19 },
+                isElevated: false,
+                OldCalibration,
+                Since.AddDays(-2)), false),
         ];
     }
 
@@ -169,13 +191,14 @@ public static class RenderFixtures
         HashSet<LeverKind> applying,
         LiveValues live,
         bool isElevated,
-        PowerCalibration? calibration = null)
+        PowerCalibration? calibration = null,
+        DateTimeOffset? since = null)
     {
         var target = TargetPlanner.Plan(mode, config, snapshot, new ModeOptions());
         var results = ResultsFor(target);
         adjust(results);
         return FlyoutStateBuilder.Build(new FlyoutInput(
-            target, results, applying, live, Since, Now, isElevated, KeepDocker: false, StartWithWindows: true, config.Hotkeys, PowerFor(config, mode, live, calibration)));
+            target, results, applying, live, since ?? Since, Now, isElevated, KeepDocker: false, StartWithWindows: true, config.Hotkeys, PowerFor(config, mode, live, calibration)));
     }
 
     /// <summary>

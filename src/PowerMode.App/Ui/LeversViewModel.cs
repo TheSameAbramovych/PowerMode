@@ -12,9 +12,6 @@ internal sealed record LeverChange(LeverSetting Setting, PowerModeKind Mode, int
 /// <summary>One line of <c>This PC</c>.</summary>
 internal sealed record FactLine(string Label, string Value);
 
-/// <summary>A typed GPU limit that is not a number.</summary>
-internal sealed record LeverInputError(string Message);
-
 /// <summary>
 /// One row of the Levers page. A choice box binds <see cref="Station"/>/<see cref="Reserve"/> (with
 /// <see cref="KeepValue"/> standing in for null, which a choice box cannot select); the GPU row binds the texts.
@@ -28,6 +25,7 @@ internal sealed class LeverRowViewModel : ObservableObject
     private int? _station;
     private int? _reserve;
     private string? _live;
+    private string? _error;
 
     public LeverRowViewModel(LeversViewModel owner, LeverSettingRow row)
     {
@@ -58,6 +56,9 @@ internal sealed class LeverRowViewModel : ObservableObject
 
     /// <summary>Live value beside the title, e.g. the estimated CPU watts.</summary>
     public string? Live { get => _live; set => Set(ref _live, value); }
+
+    /// <summary>Why the typed value was not taken, under the row; null when the last entry was fine.</summary>
+    public string? Error { get => _error; private set => Set(ref _error, value); }
 
     public int Station { get => _station ?? KeepValue; set => Choose(PowerModeKind.Station, value == KeepValue ? null : value); }
 
@@ -98,11 +99,12 @@ internal sealed class LeverRowViewModel : ObservableObject
     {
         if (LeverSettings.TryParseWatts(text, out var watts))
         {
+            Error = null;
             Choose(mode, watts);
         }
         else
         {
-            _owner.ReportError(new LeverInputError("Type whole watts, or leave it empty to keep the limit"));
+            Error = "Type whole watts, or leave it empty to keep the limit";
             Show(mode, mode == PowerModeKind.Station ? _station : _reserve);
         }
     }
@@ -121,8 +123,6 @@ internal sealed class LeversViewModel : ObservableObject
     public IReadOnlyList<FactLine> Facts { get => _facts; private set => Set(ref _facts, value); }
 
     public event EventHandler<LeverChange>? Changed;
-
-    public event EventHandler<LeverInputError>? InputError;
 
     public void Load(IReadOnlyList<LeverSettingRow> rows, MachineInfo machine)
     {
@@ -147,6 +147,4 @@ internal sealed class LeversViewModel : ObservableObject
     }
 
     internal void Report(LeverChange change) => Changed?.Invoke(this, change);
-
-    internal void ReportError(LeverInputError error) => InputError?.Invoke(this, error);
 }

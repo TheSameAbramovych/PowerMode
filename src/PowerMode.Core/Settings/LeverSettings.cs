@@ -15,8 +15,8 @@ public enum LeverSetting
     BrightnessPercent,
     RefreshHz,
     SecondaryDisplays,
-    DisplayOffMinutes,
-    HibernateMinutes,
+    DisplayOffSeconds,
+    HibernateSeconds,
     Docker,
     WallpaperEngine,
 }
@@ -74,8 +74,8 @@ public static class LeverSettings
             Row(config, LeverSetting.BrightnessPercent, "Brightness", null, true, false, [Keep, .. Steps(0, 100, BrightnessStep).Select(Percent)]),
             Row(config, LeverSetting.RefreshHz, "Refresh rate", null, true, false, [Keep, .. machine.RefreshRates.Distinct().Order().Select(Hz)]),
             Row(config, LeverSetting.SecondaryDisplays, "Other displays", machine.Monitors.Count > 1 ? null : "One display connected", true, false, [new(0, "On"), new(1, "Off")]),
-            Row(config, LeverSetting.DisplayOffMinutes, "Display off after", null, true, false, [.. MinuteChoices.Select(Minutes)]),
-            Row(config, LeverSetting.HibernateMinutes, "Hibernate after", null, true, false, [.. MinuteChoices.Select(Minutes)]),
+            Row(config, LeverSetting.DisplayOffSeconds, "Display off after", null, true, false, [.. MinuteChoices.Select(m => Timeout(m * SecondsPerMinute))]),
+            Row(config, LeverSetting.HibernateSeconds, "Hibernate after", null, true, false, [.. MinuteChoices.Select(m => Timeout(m * SecondsPerMinute))]),
             Row(config, LeverSetting.Docker, "Docker Desktop", machine.DockerInstalled ? null : MachineInfo.DockerNotInstalled, machine.DockerInstalled, false, [new(0, "Keep running"), new(1, "Stop")]),
         };
         if (machine.WallpaperEngineInstalled)
@@ -98,8 +98,8 @@ public static class LeverSettings
             LeverSetting.BrightnessPercent => mode.BrightnessPercent,
             LeverSetting.RefreshHz => mode.RefreshRateHz,
             LeverSetting.SecondaryDisplays => mode.SecondaryDisplaysOff ? 1 : 0,
-            LeverSetting.DisplayOffMinutes => mode.Scheme.DisplayOffSeconds / SecondsPerMinute,
-            LeverSetting.HibernateMinutes => mode.Scheme.HibernateSeconds / SecondsPerMinute,
+            LeverSetting.DisplayOffSeconds => mode.Scheme.DisplayOffSeconds,
+            LeverSetting.HibernateSeconds => mode.Scheme.HibernateSeconds,
             LeverSetting.Docker => mode.StopDocker ? 1 : 0,
             LeverSetting.WallpaperEngine => mode.PauseWallpaperEngine ? 1 : 0,
             _ => throw new ArgumentOutOfRangeException(nameof(setting), setting, null),
@@ -108,7 +108,7 @@ public static class LeverSettings
 
     /// <summary>
     /// Store a value, clamped to what the lever accepts (CPU 20–100 % in steps of 5, the GPU's own range, brightness
-    /// 0–100 %, minutes ≥ 0). Returns the value stored, which the page shows.
+    /// 0–100 %, timeouts in seconds ≥ 0). Returns the value stored, which the page shows.
     /// </summary>
     public static int? Apply(ModeConfig mode, LeverSetting setting, int? value, GpuInfo? gpu)
     {
@@ -134,11 +134,11 @@ public static class LeverSettings
             case LeverSetting.SecondaryDisplays:
                 mode.SecondaryDisplaysOff = value == 1;
                 break;
-            case LeverSetting.DisplayOffMinutes:
-                mode.Scheme.DisplayOffSeconds = Seconds(value);
+            case LeverSetting.DisplayOffSeconds:
+                mode.Scheme.DisplayOffSeconds = Math.Max(value ?? 0, 0);
                 break;
-            case LeverSetting.HibernateMinutes:
-                mode.Scheme.HibernateSeconds = Seconds(value);
+            case LeverSetting.HibernateSeconds:
+                mode.Scheme.HibernateSeconds = Math.Max(value ?? 0, 0);
                 break;
             case LeverSetting.Docker:
                 mode.StopDocker = value == 1;
@@ -152,6 +152,15 @@ public static class LeverSettings
 
         return ValueOf(mode, setting);
     }
+
+    /// <summary>
+    /// What to tell the user when a typed GPU limit was stored clamped to the card's range (information, not an
+    /// error); null when it was stored as typed or for any other setting.
+    /// </summary>
+    public static string? ClampNote(LeverSetting setting, int? typed, int? stored, GpuInfo? gpu) =>
+        setting == LeverSetting.GpuLimitW && typed is not null && stored != typed
+            ? string.Create(CultureInfo.InvariantCulture, $"GPU limit set to {stored} W, the nearest this card accepts ({gpu?.RangeText ?? $"{MinGpuW}–{MaxGpuW} W"})")
+            : null;
 
     /// <summary>A typed GPU limit: whole watts, or empty for "leave the limit alone".</summary>
     public static bool TryParseWatts(string? text, out int? watts)
@@ -178,7 +187,7 @@ public static class LeverSettings
 
         return setting switch
         {
-            LeverSetting.CpuMaxPercent or LeverSetting.Boost or LeverSetting.DisplayOffMinutes or LeverSetting.HibernateMinutes => [LeverKind.PowerScheme],
+            LeverSetting.CpuMaxPercent or LeverSetting.Boost or LeverSetting.DisplayOffSeconds or LeverSetting.HibernateSeconds => [LeverKind.PowerScheme],
             LeverSetting.GpuLimitW => [LeverKind.Gpu],
             LeverSetting.BrightnessPercent => [LeverKind.Brightness],
             LeverSetting.RefreshHz => [LeverKind.DisplayMode, LeverKind.Brightness],
@@ -212,7 +221,7 @@ public static class LeverSettings
         _ when value is null => Keep,
         LeverSetting.CpuMaxPercent or LeverSetting.BrightnessPercent => Percent(value.Value),
         LeverSetting.RefreshHz => Hz(value.Value),
-        LeverSetting.DisplayOffMinutes or LeverSetting.HibernateMinutes => Minutes(value.Value),
+        LeverSetting.DisplayOffSeconds or LeverSetting.HibernateSeconds => Timeout(value.Value),
         _ => new SettingOption(value, value.Value.ToString(CultureInfo.InvariantCulture)),
     };
 
@@ -222,7 +231,8 @@ public static class LeverSettings
 
     private static SettingOption Hz(int value) => new(value, string.Create(CultureInfo.InvariantCulture, $"{value} Hz"));
 
-    private static SettingOption Minutes(int minutes) => new(minutes, minutes == 0 ? "Never" : FlyoutStateBuilder.Duration(minutes * SecondsPerMinute));
+    /// <summary>A display-off or hibernate timeout, valued in seconds so one that is not whole minutes shows as it is (<c>30 s</c>).</summary>
+    private static SettingOption Timeout(int seconds) => new(seconds, seconds == 0 ? "Never" : FlyoutStateBuilder.Duration(seconds));
 
     private static IEnumerable<int> Steps(int from, int to, int step)
     {
@@ -231,6 +241,4 @@ public static class LeverSettings
             yield return value;
         }
     }
-
-    private static int Seconds(int? minutes) => (int)Math.Min(Math.Max(minutes ?? 0, 0) * (long)SecondsPerMinute, int.MaxValue);
 }

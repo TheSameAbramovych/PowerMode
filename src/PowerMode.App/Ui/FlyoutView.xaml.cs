@@ -90,7 +90,10 @@ internal sealed partial class FlyoutView : UserControl
 
     private void OnSettings(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
 
-    private void OnBack(object sender, RoutedEventArgs e) => BackRequested?.Invoke(this, EventArgs.Empty);
+    private void OnBack(object sender, RoutedEventArgs e) => GoBack();
+
+    /// <summary>Back from a settings page to the lever table, as the arrow does (Esc).</summary>
+    public void GoBack() => BackRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnAppsTab(object sender, RoutedEventArgs e) => AppsTabRequested?.Invoke(this, EventArgs.Empty);
 

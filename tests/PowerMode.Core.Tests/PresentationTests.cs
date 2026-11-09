@@ -287,6 +287,7 @@ public sealed class PresentationTests
                 RenderFixtures.Grid, RenderFixtures.GridRestored, RenderFixtures.Station, RenderFixtures.Reserve, RenderFixtures.StationApplying,
                 RenderFixtures.StationFailed, RenderFixtures.ReserveFailed, RenderFixtures.ReserveLight, RenderFixtures.SettingsApps, RenderFixtures.SettingsAppsLight,
                 RenderFixtures.SettingsAppsSaved, RenderFixtures.HeroGrid, RenderFixtures.HeroCalibrating, RenderFixtures.SettingsLevers, RenderFixtures.SettingsLeversLight, RenderFixtures.StationTwoMonitors,
+                RenderFixtures.SettingsLeversShort, RenderFixtures.SettingsAppsNoWallpaper, RenderFixtures.ReserveFailedLongStatus,
             ],
             fixtures.Select(f => f.FileName));
 
@@ -302,6 +303,10 @@ public sealed class PresentationTests
         Assert.Null(fixtures.Single(f => f.FileName == RenderFixtures.HeroGrid).State.Power!.DeltaText);
         Assert.StartsWith("▼ ", fixtures.Single(f => f.FileName == RenderFixtures.Station).State.Power!.DeltaText, StringComparison.Ordinal);
         Assert.Equal("186", fixtures.Single(f => f.FileName == RenderFixtures.HeroCalibrating).CalibrationReading);
+        Assert.Equal(RenderFixtures.ShortScreenHeight, fixtures.Single(f => f.FileName == RenderFixtures.SettingsLeversShort).MaxHeight);
+        Assert.False(fixtures.Single(f => f.FileName == RenderFixtures.SettingsAppsNoWallpaper).Settings!.WallpaperEngineInstalled);
+        Assert.True(page.WallpaperEngineInstalled);
+        Assert.Contains("3 Nov", fixtures.Single(f => f.FileName == RenderFixtures.ReserveFailedLongStatus).State.Power!.CalibrationNote, StringComparison.Ordinal);
 
         var reserveFailed = fixtures.Single(f => f.FileName == RenderFixtures.ReserveFailed).State;
         Assert.Equal("GPU limit and services need administrator rights.", reserveFailed.Banner);

@@ -24,7 +24,7 @@ internal sealed class AppRowViewModel : ObservableObject
         _owner = owner;
         Name = row.Name;
         DisplayName = row.DisplayName;
-        FileName = row.FileName;
+        FileName = WrapBeforeExtension(row.FileName);
         _station = row.Station;
         _reserve = row.Reserve;
     }
@@ -33,11 +33,18 @@ internal sealed class AppRowViewModel : ObservableObject
 
     public string DisplayName { get; }
 
+    /// <summary>The file name, allowed to wrap before its extension (a long name breaks as <c>PhoneExperienceHost</c> / <c>.exe</c>).</summary>
     public string FileName { get; }
 
     public AppChoice Station { get => _station; set => Choose(PowerModeKind.Station, ref _station, value); }
 
     public AppChoice Reserve { get => _reserve; set => Choose(PowerModeKind.Reserve, ref _reserve, value); }
+
+    private static string WrapBeforeExtension(string fileName)
+    {
+        var dot = fileName.LastIndexOf('.');
+        return dot > 0 ? string.Concat(fileName.AsSpan(0, dot), "​", fileName.AsSpan(dot)) : fileName;
+    }
 
     /// <summary>Show a value without reporting it as the user's change (a failed save is undone this way).</summary>
     public void Show(PowerModeKind mode, AppChoice choice)
@@ -73,6 +80,7 @@ internal sealed class SettingsViewModel : ObservableObject
     private string _addText = string.Empty;
     private string? _message;
     private string? _saved;
+    private bool _wallpaperEngineInstalled = true;
 
     public static IReadOnlyList<ChoiceOption> AppChoices { get; } =
     [
@@ -113,6 +121,9 @@ internal sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>The Wallpaper Engine row is shown only when it is installed (as the lever is).</summary>
+    public bool WallpaperEngineInstalled { get => _wallpaperEngineInstalled; private set => Set(ref _wallpaperEngineInstalled, value); }
+
     public string AddText { get => _addText; set => Set(ref _addText, value); }
 
     /// <summary>A validation or save problem shown under the add field; null when there is none.</summary>
@@ -140,6 +151,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
         Set(ref _pauseStation, page.PauseWallpaperStation, nameof(PauseWallpaperStation));
         Set(ref _pauseReserve, page.PauseWallpaperReserve, nameof(PauseWallpaperReserve));
+        WallpaperEngineInstalled = page.WallpaperEngineInstalled;
     }
 
     /// <summary>Show a Wallpaper Engine value without reporting it (a failed save is undone this way).</summary>

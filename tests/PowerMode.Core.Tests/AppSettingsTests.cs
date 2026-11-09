@@ -345,3 +345,26 @@ public sealed class AppSettingChangeTests
         Assert.Null(await switcher.ApplySettingChangeAsync(m => AppSettings.ImmediateLevers(m, PowerModeKind.Station, AppChoice.Keep, AppChoice.Close)));
     }
 }
+
+public sealed class NotAppliedFeedbackTests
+{
+    [Fact]
+    public void Only_a_failed_lever_turns_saved_into_a_warning()
+    {
+        Assert.Null(SettingsFeedback.NotAppliedMessage((Switching.SwitchOutcome?)null));
+        var ok = new Switching.SwitchOutcome(PowerModeKind.Station, new Dictionary<Levers.LeverKind, Levers.LeverResult>
+        {
+            [Levers.LeverKind.PowerScheme] = Levers.LeverResult.Ok(Levers.LeverResult.AlreadySet),
+        });
+        Assert.Null(SettingsFeedback.NotAppliedMessage(ok));
+
+        var failed = new Switching.SwitchOutcome(PowerModeKind.Station, new Dictionary<Levers.LeverKind, Levers.LeverResult>
+        {
+            [Levers.LeverKind.PowerScheme] = Levers.LeverResult.Ok(Levers.LeverResult.AlreadySet),
+            [Levers.LeverKind.Gpu] = Levers.LeverResult.Failed(Levers.LeverResult.NeedsAdministrator, needsElevation: true),
+            [Levers.LeverKind.Services] = Levers.LeverResult.Failed(Levers.LeverResult.NeedsAdministrator, needsElevation: true),
+        });
+        Assert.Equal("Saved, but not applied now: Needs administrator. The main page shows the lever.", SettingsFeedback.NotAppliedMessage(failed));
+        Assert.Equal("Saved, but not applied now: boom. The main page shows the lever.", SettingsFeedback.NotAppliedMessage("boom"));
+    }
+}

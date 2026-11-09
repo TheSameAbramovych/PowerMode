@@ -254,7 +254,7 @@ public sealed class LeverSettingsTests
 
         Assert.Equal(
             [LeverSetting.CpuMaxPercent, LeverSetting.Boost, LeverSetting.GpuLimitW, LeverSetting.BrightnessPercent, LeverSetting.RefreshHz,
-             LeverSetting.SecondaryDisplays, LeverSetting.DisplayOffMinutes, LeverSetting.HibernateMinutes, LeverSetting.Docker, LeverSetting.WallpaperEngine],
+             LeverSetting.SecondaryDisplays, LeverSetting.DisplayOffSeconds, LeverSetting.HibernateSeconds, LeverSetting.Docker, LeverSetting.WallpaperEngine],
             rows.Select(r => r.Setting));
         var cpu = rows.Single(r => r.Setting == LeverSetting.CpuMaxPercent);
         Assert.Equal((80, 50), (cpu.Station, cpu.Reserve));
@@ -265,10 +265,10 @@ public sealed class LeverSettingsTests
         Assert.Equal("Watts, range 60–132 W", gpu.Note);
         Assert.Equal(["Keep", "59 Hz", "60 Hz", "144 Hz"], rows.Single(r => r.Setting == LeverSetting.RefreshHz).Options.Select(o => o.Label));
         Assert.Equal((0, 1), (rows.Single(r => r.Setting == LeverSetting.SecondaryDisplays).Station, rows.Single(r => r.Setting == LeverSetting.SecondaryDisplays).Reserve));
-        var hibernate = rows.Single(r => r.Setting == LeverSetting.HibernateMinutes);
-        Assert.Equal((30, 10), (hibernate.Station, hibernate.Reserve));
+        var hibernate = rows.Single(r => r.Setting == LeverSetting.HibernateSeconds);
+        Assert.Equal((30 * 60, 10 * 60), (hibernate.Station, hibernate.Reserve));
         Assert.Equal("Never", hibernate.Options[0].Label);
-        Assert.Equal("30 min", hibernate.Options.Single(o => o.Value == 30).Label);
+        Assert.Equal("30 min", hibernate.Options.Single(o => o.Value == 30 * 60).Label);
         Assert.Equal(80, rows[0].For(PowerModeKind.Station));
         Assert.Throws<ArgumentOutOfRangeException>(() => rows[0].For(PowerModeKind.Grid));
     }
@@ -288,7 +288,7 @@ public sealed class LeverSettingsTests
         Assert.Equal("One display connected", rows.Single(r => r.Setting == LeverSetting.SecondaryDisplays).Note);
         Assert.DoesNotContain(rows, r => r.Setting == LeverSetting.WallpaperEngine);
         Assert.Contains(rows.Single(r => r.Setting == LeverSetting.CpuMaxPercent).Options, o => o is { Value: 83, Label: "83 %" });
-        Assert.Contains(rows.Single(r => r.Setting == LeverSetting.DisplayOffMinutes).Options, o => o is { Value: 7, Label: "7 min" });
+        Assert.Contains(rows.Single(r => r.Setting == LeverSetting.DisplayOffSeconds).Options, o => o is { Value: 420, Label: "7 min" });
     }
 
     [Theory]
@@ -304,8 +304,8 @@ public sealed class LeverSettingsTests
     [InlineData(LeverSetting.RefreshHz, null, null)]
     [InlineData(LeverSetting.Boost, 1, 1)]
     [InlineData(LeverSetting.SecondaryDisplays, 1, 1)]
-    [InlineData(LeverSetting.DisplayOffMinutes, 10, 10)]
-    [InlineData(LeverSetting.HibernateMinutes, -3, 0)]
+    [InlineData(LeverSetting.DisplayOffSeconds, 600, 600)]
+    [InlineData(LeverSetting.HibernateSeconds, -3, 0)]
     [InlineData(LeverSetting.Docker, 0, 0)]
     [InlineData(LeverSetting.WallpaperEngine, 0, 0)]
     public void Changes_are_clamped_to_what_the_lever_accepts(LeverSetting setting, int? value, int? stored)
@@ -325,7 +325,7 @@ public sealed class LeverSettingsTests
         LeverSettings.Apply(mode, LeverSetting.CpuMaxPercent, 40, null);
         Assert.Equal(40, mode.Scheme.MinProcessorPercent);
         Assert.Equal(2000, LeverSettings.Apply(mode, LeverSetting.GpuLimitW, 5000, null));
-        Assert.Equal(600, LeverSettings.Apply(mode, LeverSetting.DisplayOffMinutes, 10, null) * 60);
+        Assert.Equal(600, LeverSettings.Apply(mode, LeverSetting.DisplayOffSeconds, 600, null));
         Assert.Throws<ArgumentOutOfRangeException>(() => LeverSettings.Apply(mode, (LeverSetting)99, 1, null));
         Assert.Throws<ArgumentOutOfRangeException>(() => LeverSettings.ValueOf(mode, (LeverSetting)99));
         Assert.Throws<ArgumentOutOfRangeException>(() => LeverSettings.ImmediateLevers(PowerModeKind.Station, PowerModeKind.Station, (LeverSetting)99));
@@ -348,7 +348,7 @@ public sealed class LeverSettingsTests
     public void Changes_for_the_current_mode_reapply_their_levers()
     {
         Assert.Equal([LeverKind.PowerScheme], LeverSettings.ImmediateLevers(PowerModeKind.Station, PowerModeKind.Station, LeverSetting.CpuMaxPercent));
-        Assert.Equal([LeverKind.PowerScheme], LeverSettings.ImmediateLevers(PowerModeKind.Station, PowerModeKind.Station, LeverSetting.HibernateMinutes));
+        Assert.Equal([LeverKind.PowerScheme], LeverSettings.ImmediateLevers(PowerModeKind.Station, PowerModeKind.Station, LeverSetting.HibernateSeconds));
         Assert.Equal([LeverKind.Gpu], LeverSettings.ImmediateLevers(PowerModeKind.Reserve, PowerModeKind.Reserve, LeverSetting.GpuLimitW));
         Assert.Equal([LeverKind.Brightness], LeverSettings.ImmediateLevers(PowerModeKind.Reserve, PowerModeKind.Reserve, LeverSetting.BrightnessPercent));
         Assert.Equal([LeverKind.DisplayMode, LeverKind.Brightness], LeverSettings.ImmediateLevers(PowerModeKind.Reserve, PowerModeKind.Reserve, LeverSetting.RefreshHz));
@@ -375,5 +375,33 @@ public sealed class LeverSettingsTests
         Assert.Equal(70, saved.Modes.Reserve.GpuLimitWatts);
         Assert.False(store.Update(c => c.Flyout.Margin = 999, "margin"));
         Assert.Equal(12, store.Current.Flyout.Margin);
+    }
+}
+
+public sealed class LeverSettingsSecondsAndClampTests
+{
+    [Fact]
+    public void A_timeout_that_is_not_whole_minutes_is_shown_as_it_is()
+    {
+        var config = AppConfig.CreateDefault();
+        config.Modes.Station.Scheme.DisplayOffSeconds = 30;
+
+        var row = LeverSettings.Build(config, MachineInfo.Assumed).Single(r => r.Setting == LeverSetting.DisplayOffSeconds);
+
+        Assert.Equal(30, row.Station);
+        Assert.Contains(row.Options, o => o is { Value: 30, Label: "30 s" });
+        Assert.Equal("Never", row.Options.Single(o => o.Value == 0).Label);
+    }
+
+    [Fact]
+    public void A_clamped_gpu_limit_is_explained_and_an_exact_one_is_not()
+    {
+        var gpu = new GpuInfo("RTX", 20, 132);
+
+        Assert.Equal("GPU limit set to 132 W, the nearest this card accepts (20–132 W)", LeverSettings.ClampNote(LeverSetting.GpuLimitW, 200, 132, gpu));
+        Assert.Equal("GPU limit set to 2000 W, the nearest this card accepts (1–2000 W)", LeverSettings.ClampNote(LeverSetting.GpuLimitW, 5000, 2000, null));
+        Assert.Null(LeverSettings.ClampNote(LeverSetting.GpuLimitW, 90, 90, gpu));
+        Assert.Null(LeverSettings.ClampNote(LeverSetting.GpuLimitW, null, null, gpu));
+        Assert.Null(LeverSettings.ClampNote(LeverSetting.CpuMaxPercent, 83, 85, gpu));
     }
 }

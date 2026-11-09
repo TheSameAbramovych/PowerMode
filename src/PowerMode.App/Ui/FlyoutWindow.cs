@@ -20,7 +20,7 @@ internal sealed class FlyoutWindow : Window
     private const double WorkAreaReserve = 24;
     private const string TaskbarClass = "Shell_TrayWnd";
 
-    /// <summary>The flyout grows with its content up to the work-area height (less a margin); the lever table never scrolls.</summary>
+    /// <summary>The flyout grows with its content up to the work-area height (less a margin); longer content scrolls (the lever table and the settings pages alike).</summary>
     public static double MaxFlyoutHeight => SystemParameters.WorkArea.Height - WorkAreaReserve;
 
     private readonly Func<FlyoutConfig> _config;
@@ -131,10 +131,10 @@ internal sealed class FlyoutWindow : Window
         var settings = View.DataContext is FlyoutViewModel { IsSettingsOpen: true } model ? model : null;
         if (e.Key == Key.Escape)
         {
-            // Esc leaves the Apps settings page first, then closes the flyout.
+            // Esc leaves a settings page first (the same way as the back arrow), then closes the flyout.
             if (settings is not null)
             {
-                settings.Page = FlyoutPage.Main;
+                View.GoBack();
             }
             else
             {

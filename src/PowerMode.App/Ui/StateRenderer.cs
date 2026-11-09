@@ -10,7 +10,7 @@ using PowerMode.Core.Settings;
 
 namespace PowerMode.App.Ui;
 
-/// <summary>What <c>--render-states</c> wrote, and every fixture whose content does not fit the flyout's maximum height.</summary>
+/// <summary>What <c>--render-states</c> wrote, and every lever-table fixture whose content does not fit the flyout's maximum height (settings pages scroll instead).</summary>
 internal sealed record RenderReport(IReadOnlyList<string> Written, IReadOnlyList<string> Overflows);
 
 /// <summary><c>--render-states</c>: renders the flyout fixtures and tray icons to PNG with fake data. Touches nothing.</summary>
@@ -35,10 +35,14 @@ internal static class StateRenderer
             var path = Path.Combine(directory, fixture.FileName);
             var (bitmap, height) = RenderFlyout(app, fixture);
             IconRenderer.SavePng(bitmap, path);
-            written.Add(string.Create(CultureInfo.InvariantCulture, $"{path} ({height:0} of {FlyoutWindow.MaxFlyoutHeight:0} px)"));
-            if (height > FlyoutWindow.MaxFlyoutHeight)
+            var limit = fixture.MaxHeight ?? FlyoutWindow.MaxFlyoutHeight;
+            var scrolls = height > limit;
+            written.Add(string.Create(CultureInfo.InvariantCulture, $"{path} ({height:0} of {limit:0} px{(scrolls ? ", scrolls" : string.Empty)})"));
+
+            // A settings page scrolls under its header and tabs; the lever table should fit this PC's work area.
+            if (scrolls && fixture.Settings is null && fixture.Levers is null)
             {
-                overflows.Add(string.Create(CultureInfo.InvariantCulture, $"{fixture.FileName}: content is {height:0} px, more than {FlyoutWindow.MaxFlyoutHeight:0} px (it would scroll)"));
+                overflows.Add(string.Create(CultureInfo.InvariantCulture, $"{fixture.FileName}: content is {height:0} px, more than {limit:0} px (the lever table would scroll)"));
             }
         }
 
@@ -133,7 +137,7 @@ internal static class StateRenderer
         {
             CornerRadius = new CornerRadius(8),
             BorderThickness = new Thickness(1),
-            MaxHeight = FlyoutWindow.MaxFlyoutHeight,
+            MaxHeight = fixture.MaxHeight ?? FlyoutWindow.MaxFlyoutHeight,
             Child = new FlyoutView { DataContext = model },
         };
         frame.SetResourceReference(Border.BackgroundProperty, Palette.Background);
