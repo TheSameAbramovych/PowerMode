@@ -133,8 +133,13 @@ public sealed class PresentationTests
         var one = Build(PowerModeKind.Reserve, results: new() { [LeverKind.Docker] = LeverResult.Failed("x") });
         Assert.Equal("Reserve · 1 lever failed", one.StatusLine);
 
-        var skipped = Build(PowerModeKind.Station, results: new() { [LeverKind.Efficiency] = LeverResult.Skipped(LeverResult.NotOwned) });
-        Assert.Equal(RowGlyph.None, Row(skipped, LeverRow.Efficiency).Glyph);
+        // "Efficiency: Off" holds whether Station came from Grid (nothing to clear: not used) or from Reserve
+        // (stale records cleared: ok); the glyph says the same in both.
+        var fromGrid = Build(PowerModeKind.Station, results: new() { [LeverKind.Efficiency] = LeverResult.Skipped(LeverResult.NotOwned) });
+        var fromReserve = Build(PowerModeKind.Station, results: new() { [LeverKind.Efficiency] = LeverResult.Ok("Cleared 3 processes") });
+        Assert.Equal(RowGlyph.Ok, Row(fromGrid, LeverRow.Efficiency).Glyph);
+        Assert.Equal(RowGlyph.Ok, Row(fromReserve, LeverRow.Efficiency).Glyph);
+        Assert.Equal(RowGlyph.None, Row(fromGrid, LeverRow.Services).Glyph);
     }
 
     [Fact]
@@ -238,8 +243,22 @@ public sealed class PresentationTests
         var fixtures = RenderFixtures.All();
 
         Assert.Equal(
-            [RenderFixtures.Grid, RenderFixtures.Station, RenderFixtures.Reserve, RenderFixtures.StationApplying, RenderFixtures.StationFailed, RenderFixtures.ReserveLight],
+            [
+                RenderFixtures.Grid, RenderFixtures.GridRestored, RenderFixtures.Station, RenderFixtures.Reserve, RenderFixtures.StationApplying,
+                RenderFixtures.StationFailed, RenderFixtures.ReserveFailed, RenderFixtures.ReserveLight,
+            ],
             fixtures.Select(f => f.FileName));
+
+        var reserveFailed = fixtures.Single(f => f.FileName == RenderFixtures.ReserveFailed).State;
+        Assert.Equal("GPU limit and services need administrator rights.", reserveFailed.Banner);
+        Assert.Equal(PowerModeKind.Reserve, reserveFailed.Mode);
+
+        // Grid's results follow its plan: nothing is owned without a snapshot; with one, the restored levers are.
+        var restored = RenderFixtures.ResultsFor(TargetPlanner.Plan(PowerModeKind.Grid, Config, RenderFixtures.Baseline()));
+        Assert.All(RenderFixtures.ResultsFor(TargetPlanner.Plan(PowerModeKind.Grid, Config, null)).Values, r => Assert.Equal(LeverStatus.Skipped, r.Status));
+        Assert.Equal(LeverStatus.Ok, restored[LeverKind.PowerScheme].Status);
+        Assert.Equal(LeverStatus.Ok, restored[LeverKind.Docker].Status);
+        Assert.Equal(LeverStatus.Skipped, restored[LeverKind.Efficiency].Status);
 
         var applying = fixtures.Single(f => f.FileName == RenderFixtures.StationApplying).State;
         Assert.True(applying.IsApplying);

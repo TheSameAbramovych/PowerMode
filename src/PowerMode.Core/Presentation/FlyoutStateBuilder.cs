@@ -143,7 +143,8 @@ public static class FlyoutStateBuilder
             }
             else
             {
-                glyph = results.Any(r => r.Status == LeverStatus.Ok) ? RowGlyph.Ok : RowGlyph.None;
+                // The row's fact holds now: set, already set, or not used in this mode (all levers report only those).
+                glyph = results.Count > 0 ? RowGlyph.Ok : RowGlyph.None;
             }
         }
 

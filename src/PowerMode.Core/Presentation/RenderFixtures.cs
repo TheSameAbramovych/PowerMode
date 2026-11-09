@@ -12,10 +12,12 @@ public sealed record RenderFixture(string FileName, FlyoutState State, bool Ligh
 public static class RenderFixtures
 {
     public const string Grid = "grid.png";
+    public const string GridRestored = "grid-restored.png";
     public const string Station = "station.png";
     public const string Reserve = "reserve.png";
     public const string StationApplying = "station-applying.png";
     public const string StationFailed = "station-failed.png";
+    public const string ReserveFailed = "reserve-failed.png";
     public const string ReserveLight = "reserve-light.png";
 
     /// <summary>A fixed afternoon so the renders are reproducible.</summary>
@@ -32,14 +34,15 @@ public static class RenderFixtures
 
         return
         [
-            new(Grid, Build(config, PowerModeKind.Grid, null, AllOk(PowerModeKind.Grid), [], gridLive, isElevated: false), false),
-            new(Station, Build(config, PowerModeKind.Station, snapshot, AllOk(PowerModeKind.Station), [], stationLive, isElevated: true), false),
-            new(Reserve, Build(config, PowerModeKind.Reserve, snapshot, AllOk(PowerModeKind.Reserve), [], reserveLive, isElevated: true), false),
+            new(Grid, Build(config, PowerModeKind.Grid, null, _ => { }, [], gridLive, isElevated: false), false),
+            new(GridRestored, Build(config, PowerModeKind.Grid, snapshot, _ => { }, [], gridLive, isElevated: true), false),
+            new(Station, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false),
+            new(Reserve, Build(config, PowerModeKind.Reserve, snapshot, _ => { }, [], reserveLive, isElevated: true), false),
             new(StationApplying, Build(
                 config,
                 PowerModeKind.Station,
                 snapshot,
-                Without(AllOk(PowerModeKind.Station), LeverKind.PowerScheme, LeverKind.Docker),
+                r => Without(r, LeverKind.PowerScheme, LeverKind.Docker),
                 [LeverKind.PowerScheme, LeverKind.Docker],
                 stationLive with { CpuGhz = 3.4, CpuUtilityPercent = 18, DockerEngineRunning = true, DockerContainersRunning = 6 },
                 isElevated: false), false),
@@ -47,11 +50,19 @@ public static class RenderFixtures
                 config,
                 PowerModeKind.Station,
                 snapshot,
-                WithElevationFailures(AllOk(PowerModeKind.Station), LeverKind.Gpu, LeverKind.Services),
+                r => WithElevationFailures(r, LeverKind.Gpu, LeverKind.Services),
                 [],
                 stationLive with { GpuWatts = 19 },
                 isElevated: false), false),
-            new(ReserveLight, Build(config, PowerModeKind.Reserve, snapshot, AllOk(PowerModeKind.Reserve), [], reserveLive, isElevated: true), true),
+            new(ReserveFailed, Build(
+                config,
+                PowerModeKind.Reserve,
+                snapshot,
+                r => WithElevationFailures(r, LeverKind.Gpu, LeverKind.Services),
+                [],
+                reserveLive with { GpuWatts = 19 },
+                isElevated: false), false),
+            new(ReserveLight, Build(config, PowerModeKind.Reserve, snapshot, _ => { }, [], reserveLive, isElevated: true), true),
         ];
     }
 
@@ -78,41 +89,46 @@ public static class RenderFixtures
         },
     };
 
+    /// <summary>
+    /// What a successful apply of this target reports: "not used in this mode" where the target leaves a lever alone
+    /// (as each lever plans it), "already set" everywhere else.
+    /// </summary>
+    public static Dictionary<LeverKind, LeverResult> ResultsFor(TargetState target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return Enum.GetValues<LeverKind>().ToDictionary(
+            k => k,
+            k => target.Sets(k) ? LeverResult.Ok(LeverResult.AlreadySet) : LeverResult.Skipped(LeverResult.NotOwned));
+    }
+
     private static FlyoutState Build(
         AppConfig config,
         PowerModeKind mode,
         Snapshot? snapshot,
-        Dictionary<LeverKind, LeverResult> results,
+        Action<Dictionary<LeverKind, LeverResult>> adjust,
         HashSet<LeverKind> applying,
         LiveValues live,
         bool isElevated)
     {
         var target = TargetPlanner.Plan(mode, config, snapshot, new ModeOptions());
+        var results = ResultsFor(target);
+        adjust(results);
         return FlyoutStateBuilder.Build(new FlyoutInput(target, results, applying, live, Since, Now, isElevated, KeepDocker: false, StartWithWindows: true, config.Hotkeys));
     }
 
-    private static Dictionary<LeverKind, LeverResult> AllOk(PowerModeKind mode) =>
-        Enum.GetValues<LeverKind>().ToDictionary(
-            k => k,
-            k => k == LeverKind.Efficiency && mode == PowerModeKind.Station ? LeverResult.Skipped(LeverResult.NotOwned) : LeverResult.Ok(LeverResult.AlreadySet));
-
-    private static Dictionary<LeverKind, LeverResult> Without(Dictionary<LeverKind, LeverResult> results, params LeverKind[] kinds)
+    private static void Without(Dictionary<LeverKind, LeverResult> results, params LeverKind[] kinds)
     {
         foreach (var kind in kinds)
         {
             results.Remove(kind);
         }
-
-        return results;
     }
 
-    private static Dictionary<LeverKind, LeverResult> WithElevationFailures(Dictionary<LeverKind, LeverResult> results, params LeverKind[] kinds)
+    private static void WithElevationFailures(Dictionary<LeverKind, LeverResult> results, params LeverKind[] kinds)
     {
         foreach (var kind in kinds)
         {
             results[kind] = LeverResult.Failed(LeverResult.NeedsAdministrator, needsElevation: true);
         }
-
-        return results;
     }
 }

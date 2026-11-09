@@ -11,10 +11,10 @@
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-        <StackPanel Margin="16,12,12,12">
+        <StackPanel Margin="16,8,12,8">
 
             <!-- 1. Header -->
-            <Grid Margin="0,0,0,8">
+            <Grid Margin="0,0,0,4">
                 <TextBlock Text="PowerMode" FontFamily="{StaticResource PmDisplayFont}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Settings}" ToolTip="Open config" Click="OnConfig" />
@@ -39,7 +39,7 @@
             </Border>
 
             <!-- 3. Status line -->
-            <TextBlock Text="{Binding StatusLine}" FontSize="13" Margin="0,8,4,0" TextWrapping="Wrap">
+            <TextBlock Text="{Binding StatusLine}" FontSize="13" Margin="0,6,4,0" TextWrapping="Wrap">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
                         <Setter Property="Foreground" Value="{DynamicResource PmMuted}" />
@@ -54,31 +54,29 @@
             </TextBlock>
 
             <!-- 6. Elevation banner -->
-            <Border Background="{DynamicResource PmWarningFill}" CornerRadius="6" Padding="10,6" Margin="0,8,4,0"
+            <Border Background="{DynamicResource PmWarningFill}" CornerRadius="6" Padding="10,4" Margin="0,6,4,0"
                     Visibility="{Binding Banner, Converter={StaticResource NullToCollapsed}}">
+                <!-- One row: glyph · text (wraps) · button, vertically centred. -->
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
                     <TextBlock Text="{x:Static ui:Glyphs.Warning}" FontFamily="{StaticResource PmIconFont}" FontSize="14"
-                               Foreground="{DynamicResource PmWarning}" Margin="0,1,8,0" VerticalAlignment="Top" />
+                               Foreground="{DynamicResource PmWarning}" Margin="0,0,8,0" VerticalAlignment="Center" />
                     <TextBlock Grid.Column="1" Text="{Binding Banner}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
-                    <Button Grid.Row="1" Grid.Column="1" Style="{StaticResource PmAccentButton}" Content="Restart as administrator"
-                            HorizontalAlignment="Left" Margin="0,6,0,0" Click="OnRestartElevated" />
+                    <Button Grid.Column="2" Style="{StaticResource PmAccentButton}" Content="Restart as administrator"
+                            VerticalAlignment="Center" Margin="8,0,0,0" Click="OnRestartElevated" />
                 </Grid>
             </Border>
 
             <!-- 4. Lever table -->
-            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,1,0,0" Margin="0,8,4,0">
+            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,1,0,0" Margin="0,6,4,0">
                 <ItemsControl ItemsSource="{Binding Rows}" Focusable="False">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type ui:RowViewModel}">
-                            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" MinHeight="40" Padding="0,6,0,6">
+                            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" MinHeight="40" Padding="0,4,0,4">
                                 <Grid VerticalAlignment="Center">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="84" />
@@ -98,14 +96,14 @@
                                                         </ItemsControl.ItemsPanel>
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate>
-                                                                <TextBlock Text="{Binding Text}" FontSize="13" TextWrapping="Wrap" />
+                                                                <TextBlock Text="{Binding Text}" FontSize="13" TextWrapping="Wrap" LineHeight="16" LineStackingStrategy="BlockLineHeight" />
                                                             </DataTemplate>
                                                         </ItemsControl.ItemTemplate>
                                                     </ItemsControl>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <TextBlock Text="{Binding FailureReason}" FontSize="12" TextWrapping="Wrap" Margin="0,1,0,0"
+                                        <TextBlock Text="{Binding FailureReason}" FontSize="12" TextWrapping="Wrap" LineHeight="15" LineStackingStrategy="BlockLineHeight"
                                                    Foreground="{DynamicResource PmWarning}"
                                                    Visibility="{Binding FailureReason, Converter={StaticResource NullToCollapsed}}" />
                                     </StackPanel>
@@ -157,10 +155,15 @@
             </Border>
 
             <!-- 5. Footer -->
-            <Grid Margin="0,10,4,0">
-                <TextBlock Text="{Binding Footer}" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" TextTrimming="None" />
-                <CheckBox Style="{StaticResource PmSwitch}" Content="Start with Windows" IsChecked="{Binding StartWithWindows, Mode=TwoWay}"
-                          HorizontalAlignment="Right" Click="OnStartWithWindows" />
+            <Grid Margin="0,8,4,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Footer}" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center"
+                           TextWrapping="Wrap" Margin="0,0,8,0" />
+                <CheckBox Grid.Column="1" Style="{StaticResource PmSwitch}" Content="Start with Windows" IsChecked="{Binding StartWithWindows, Mode=TwoWay}"
+                          VerticalAlignment="Center" Click="OnStartWithWindows" />
             </Grid>
         </StackPanel>
     </ScrollViewer>

@@ -99,7 +99,8 @@ shown by tray left click, hotkey, or `PowerMode.exe --open`. Layout top→bottom
    live value when measurable — CPU watts are NOT measurable without a kernel driver, so CPU shows
    `3.1 GHz · 12 %` from performance counters (`Processor Information(_Total)\% Processor Performance`
    × max MHz, `% Processor Utility`), GPU `9 W` from NVML, Monitor `35 % · 60 Hz` as read back, Docker
-   `engine stopped` / `6 running` — and a 16 px status glyph: ✓ (green) applied, ⟳ spinning while
+   `engine stopped` / `6 running` — and a 16 px status glyph: ✓ (green) this row's fact holds now (set,
+   already set, or not used in this mode; no glyph when the row has no result yet), ⟳ spinning while
    applying, ⚠ (amber) failed with the reason as tooltip **and** as a second line in the row (the owner
    judges by look — the reason must be visible). Rows 40 px min, 1 px dividers, no hover-only controls.
    The Docker row carries one toggle on the right (`Keep running` switch), visible only in Station.
@@ -119,10 +120,12 @@ shown by tray left click, hotkey, or `PowerMode.exe --open`. Layout top→bottom
 - `--mode grid|station|reserve` — apply (through the running instance if any, else apply and exit).
 - `--status` — print the lever table as text.
 - `--dry-run --mode X` — print what would change, change nothing.
-- `--render-states <dir>` — render the flyout to PNG for review: `grid.png`, `station.png`,
-  `reserve.png`, `station-applying.png` (CPU and Docker rows ⟳), `station-failed.png` (GPU + Services
-  ⚠ "needs administrator", banner visible), `reserve-light.png` (light theme), plus `tray-*.png` at
-  32 px for the three modes. Uses fake lever data; touches nothing. Exit when done.
+- `--render-states <dir>` — render the flyout to PNG for review: `grid.png`, `grid-restored.png` (Grid
+  after a blackout, restoring the snapshot), `station.png`, `reserve.png`, `station-applying.png` (CPU
+  and Docker rows ⟳), `station-failed.png` and `reserve-failed.png` (GPU + Services ⚠ "needs
+  administrator", banner visible), `reserve-light.png` (light theme), plus `tray-*.png` at 32 px for the
+  three modes. Uses fake lever data; touches nothing. Exits with an error naming any state whose content
+  is taller than the 600 px flyout. Exit when done.
 - `--install-autostart` / `--uninstall-autostart` — create/delete the scheduled task `PowerMode`
   (trigger: at logon of this user, run level Highest, no battery conditions, no time limit, start in
   the exe folder). Self-elevates with `runas` if needed.

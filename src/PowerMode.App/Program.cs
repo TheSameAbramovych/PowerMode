@@ -68,11 +68,18 @@ internal static class Program
     private static int RenderStates(string directory)
     {
         var app = new App();
-        foreach (var path in StateRenderer.Run(app, Path.GetFullPath(directory)))
+        var report = StateRenderer.Run(app, Path.GetFullPath(directory));
+        foreach (var path in report.Written)
         {
             Console.WriteLine(path);
         }
 
-        return CliRunner.ExitOk;
+        // A state taller than the flyout would scroll: fail, naming it.
+        foreach (var overflow in report.Overflows)
+        {
+            Console.Error.WriteLine(overflow);
+        }
+
+        return report.Overflows.Count == 0 ? CliRunner.ExitOk : CliRunner.ExitError;
     }
 }

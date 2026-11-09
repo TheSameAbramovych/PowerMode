@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -8,22 +9,32 @@ using PowerMode.Core.Presentation;
 
 namespace PowerMode.App.Ui;
 
+/// <summary>What <c>--render-states</c> wrote, and every fixture whose content does not fit the flyout's maximum height.</summary>
+internal sealed record RenderReport(IReadOnlyList<string> Written, IReadOnlyList<string> Overflows);
+
 /// <summary><c>--render-states</c>: renders the flyout fixtures and tray icons to PNG with fake data. Touches nothing.</summary>
 internal static class StateRenderer
 {
     private const double Scale = 2.0;
     private const int TrayPngSize = 32;
     private const double Dpi = 96;
+    private const double FrameBorder = 2;
 
-    public static IReadOnlyList<string> Run(App app, string directory)
+    public static RenderReport Run(App app, string directory)
     {
         Directory.CreateDirectory(directory);
         var written = new List<string>();
+        var overflows = new List<string>();
         foreach (var fixture in RenderFixtures.All())
         {
             var path = Path.Combine(directory, fixture.FileName);
-            IconRenderer.SavePng(RenderFlyout(app, fixture.State, fixture.LightTheme), path);
-            written.Add(path);
+            var (bitmap, height) = RenderFlyout(app, fixture.State, fixture.LightTheme);
+            IconRenderer.SavePng(bitmap, path);
+            written.Add(string.Create(CultureInfo.InvariantCulture, $"{path} ({height:0} of {FlyoutWindow.MaxFlyoutHeight:0} px)"));
+            if (height > FlyoutWindow.MaxFlyoutHeight)
+            {
+                overflows.Add(string.Create(CultureInfo.InvariantCulture, $"{fixture.FileName}: content is {height:0} px, more than {FlyoutWindow.MaxFlyoutHeight:0} px (it would scroll)"));
+            }
         }
 
         var lightTaskbar = Palette.TaskbarUsesLightTheme();
@@ -37,10 +48,11 @@ internal static class StateRenderer
         var applying = Path.Combine(directory, "tray-station-applying.png");
         IconRenderer.SavePng(IconRenderer.Render(PowerModeKind.Station, TrayPngSize, lightTaskbar, spinnerFrame: 1), applying);
         written.Add(applying);
-        return written;
+        return new RenderReport(written, overflows);
     }
 
-    public static BitmapSource RenderFlyout(App app, FlyoutState state, bool light)
+    /// <summary>The framed flyout as the window shows it, and the height its content needs without the window's maximum.</summary>
+    public static (BitmapSource Bitmap, double ContentHeight) RenderFlyout(App app, FlyoutState state, bool light)
     {
         ArgumentNullException.ThrowIfNull(app);
         app.ThemeMode = light ? ThemeMode.Light : ThemeMode.Dark;
@@ -71,6 +83,15 @@ internal static class StateRenderer
         var bitmap = new RenderTargetBitmap(width, height, Dpi * Scale, Dpi * Scale, PixelFormats.Pbgra32);
         bitmap.Render(host);
         bitmap.Freeze();
-        return bitmap;
+
+        // The frame's MaxHeight clamps what it reports, so measure an unclamped copy of the view for the guard.
+        var probe = new FlyoutView { DataContext = model };
+        var unbounded = new Size(double.PositiveInfinity, double.PositiveInfinity);
+        probe.Measure(unbounded);
+        probe.Arrange(new Rect(probe.DesiredSize));
+        Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.Render);
+        probe.UpdateLayout();
+        probe.Measure(unbounded);
+        return (bitmap, probe.DesiredSize.Height + FrameBorder);
     }
 }
