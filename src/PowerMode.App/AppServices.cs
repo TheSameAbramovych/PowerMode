@@ -4,6 +4,7 @@ using PowerMode.Core;
 using PowerMode.Core.Config;
 using PowerMode.Core.Levers;
 using PowerMode.Core.Logging;
+using PowerMode.Core.Model;
 using PowerMode.Core.Planning;
 using PowerMode.Core.Power;
 using PowerMode.Core.Presentation;
@@ -53,6 +54,44 @@ internal sealed class AppServices : IDisposable
 
     public static AppServices Create() => new();
 
+    /// <summary>What this PC has; <see cref="MachineInfo.Assumed"/> until <see cref="RefreshMachine"/> has run.</summary>
+    public MachineInfo Machine { get; private set; } = MachineInfo.Assumed;
+
+    /// <summary>Detect CPU, GPU, monitors, Docker and Wallpaper Engine (registry, NVML, CCD: run it off the UI thread).</summary>
+    public MachineInfo RefreshMachine() => Machine = MachineProbe.Read(Config.Current, LeverSet);
+
+    /// <summary>
+    /// The first start on this PC (config.json was just created): Grid's fallback scheme becomes the scheme active now
+    /// (unless it is one of PowerMode's), and the CPU part of the estimate is tuned to this CPU.
+    /// </summary>
+    public async Task TuneFirstRunAsync()
+    {
+        if (!Config.CreatedOnLoad)
+        {
+            return;
+        }
+
+        Guid? active = null;
+        try
+        {
+            active = await LeverSet.Powercfg.ActiveSchemeAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (LeverException ex)
+        {
+            Log.Error("config", "Cannot read the active power scheme for the fallback scheme", ex);
+        }
+
+        var machine = Machine;
+        var fallback = active is { } scheme && !PowerSchemes.IsOwn(scheme) ? scheme : (Guid?)null;
+        Config.Update(
+            config =>
+            {
+                config.FallbackScheme = fallback ?? config.FallbackScheme;
+                CpuProfiles.Tune(config.Power, machine.CpuName, machine.CpuMaxMhz);
+            },
+            $"first start on this PC: fallback scheme {fallback?.ToString() ?? "unchanged"}, CPU estimate for {machine.CpuName} ({CpuProfiles.GuessTdpW(machine.CpuName)} W)");
+    }
+
     /// <summary>Before applying anything: if the state was lost while a PowerMode scheme is active, take that mode back.</summary>
     public async Task RecoverLostModeAsync()
     {
@@ -87,7 +126,8 @@ internal sealed class AppServices : IDisposable
             state.OptionsFor(PowerModeKind.Station).KeepDocker,
             startWithWindows,
             Config.Current.Hotkeys,
-            power));
+            power,
+            Machine));
     }
 
     /// <summary>The power card from one live reading (<c>--status</c>: no history, no "vs Grid").</summary>

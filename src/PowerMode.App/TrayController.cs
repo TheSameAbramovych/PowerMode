@@ -2,9 +2,11 @@ using System.Globalization;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using PowerMode.App.Infrastructure;
+using PowerMode.App.Native;
 using PowerMode.App.Ui;
 using PowerMode.Core;
 using PowerMode.Core.Cli;
@@ -29,6 +31,7 @@ internal sealed class TrayController : IDisposable
     private static readonly TimeSpan ReopenGuard = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan StartWatchdog = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan PromotionRetry = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan ShutdownGrace = TimeSpan.FromSeconds(1);
     private static readonly LeverKind[] DisplayLevers = [LeverKind.DisplayMode, LeverKind.Brightness];
 
     private readonly App _app;
@@ -81,6 +84,7 @@ internal sealed class TrayController : IDisposable
         using (new Timer(_ => _services.Log.Write(Category, $"Start-up is still at step \"{step}\" after {StartWatchdog.TotalSeconds:0} s"), null, StartWatchdog, Timeout.InfiniteTimeSpan))
         {
             _app.DispatcherUnhandledException += OnUnhandledException;
+            _app.SessionEnding += OnSessionEnding;
             System.Windows.Forms.Application.EnableVisualStyles();
             ApplyTheme();
             Wire();
@@ -259,11 +263,58 @@ internal sealed class TrayController : IDisposable
     /// <summary>The power scheme survives a reboot, the GPU limit and closed apps do not: re-apply (after recovering a lost state).</summary>
     private async Task ReapplyOnStartAsync()
     {
+        var machine = await Task.Run(_services.RefreshMachine);
+        _services.Log.Write(Category, $"This PC: {string.Join("; ", machine.Facts().Select(f => $"{f.Label} {f.Value}"))}");
+        await Task.Run(_services.TuneFirstRunAsync);
         await Task.Run(_services.RecoverLostModeAsync);
         Refresh();
-        if (_services.Switcher.NeedsReapplyOnStart)
+
+        // startInGrid: every new start begins without limits; otherwise the saved mode is applied again.
+        var state = _services.Switcher.State;
+        switch (StartAndShutdown.Decide(state, _services.Config.Current.StartInGrid))
         {
-            await SwitchAsync(_services.Switcher.State.Mode);
+            case StartAction.RestoreGrid:
+                _services.Log.Write(Category, $"Start in Grid: {ModeNames.Display(state.Mode)} was saved; restoring Grid (startInGrid)");
+                await SwitchAsync(PowerModeKind.Grid);
+                break;
+            case StartAction.Reapply:
+                _services.Log.Write(Category, $"Re-applying {ModeNames.Display(state.Mode)} on start");
+                await SwitchAsync(state.Mode);
+                break;
+            case StartAction.Nothing:
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Windows is shutting down or signing out: in a saving mode (and with <c>gridOnShutdown</c>) restore Grid's power
+    /// scheme, displays, brightness and GPU limit first, within 5 s, so the next start has no limits. Windows shows
+    /// the reason while it waits. The rest (Docker, apps, services) stays owed for the next start.
+    /// </summary>
+    private void OnSessionEnding(object? sender, SessionEndingCancelEventArgs e)
+    {
+        var mode = _services.Switcher.State.Mode;
+        if (!StartAndShutdown.RestoresAtShutdown(mode, _services.Config.Current.GridOnShutdown))
+        {
+            _services.Log.Write(Category, $"Session ending ({e.ReasonSessionEnding}) in {ModeNames.Display(mode)}; nothing to restore");
+            return;
+        }
+
+        var window = new WindowInteropHelper(_flyout).EnsureHandle();
+        var blocked = User32.ShutdownBlockReasonCreate(window, "PowerMode is restoring your power settings");
+        try
+        {
+            _services.Log.Write(Category, $"Session ending ({e.ReasonSessionEnding}) in {ModeNames.Display(mode)}: restoring Grid");
+            var restore = Task.Run(() => _services.Switcher.ShutdownToGridAsync(StartAndShutdown.ShutdownBudget));
+            var done = restore.Wait(StartAndShutdown.ShutdownBudget + ShutdownGrace) && restore.Result;
+            _services.Log.Write(Category, done ? "Shutdown: Grid restored" : "Shutdown: Grid not restored in time; the next start restores it");
+        }
+        finally
+        {
+            if (blocked)
+            {
+                User32.ShutdownBlockReasonDestroy(window);
+            }
         }
     }
 

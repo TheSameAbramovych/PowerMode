@@ -45,6 +45,7 @@ internal static class CliRunner
     public static async Task<int> StatusAsync()
     {
         using var services = AppServices.Create();
+        services.RefreshMachine();
         await Task.Delay(CounterSampleGap).ConfigureAwait(false);
         var live = await services.Live.ReadAsync(includeSlow: true, CancellationToken.None).ConfigureAwait(false);
         var autostart = await services.Autostart.IsInstalledAsync(CancellationToken.None).ConfigureAwait(false);

@@ -126,6 +126,15 @@ internal static class User32
 
     public const uint MonitorDefaultToPrimary = 1;
 
+    /// <summary>Windows shows this reason while it waits for PowerMode at shutdown.</summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShutdownBlockReasonCreate(IntPtr window, string reason);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShutdownBlockReasonDestroy(IntPtr window);
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "FindWindowW")]
     public static extern IntPtr FindWindow(string className, string? windowName);
 

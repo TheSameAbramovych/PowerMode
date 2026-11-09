@@ -29,6 +29,9 @@ public sealed class ConfigStore : IDisposable
 
     public string Path => _path;
 
+    /// <summary>config.json did not exist and was created with the defaults (the first start on this PC).</summary>
+    public bool CreatedOnLoad { get; private set; }
+
     /// <summary>Raised (on a thread-pool thread) after a valid config was reloaded from disk.</summary>
     public event EventHandler? Changed;
 
@@ -41,6 +44,7 @@ public sealed class ConfigStore : IDisposable
             {
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_path)!);
                 File.WriteAllText(_path, ConfigLoader.Serialize(Current));
+                CreatedOnLoad = true;
                 _log.Write(Category, $"Created {_path} with defaults");
                 return true;
             }

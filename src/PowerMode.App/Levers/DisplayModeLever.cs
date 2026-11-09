@@ -101,7 +101,7 @@ internal sealed class DisplayModeLever : ILever
     }
 
     /// <summary>Refresh rates the display offers at its current resolution and colour depth.</summary>
-    private static List<int> OfferedRates(DisplayModeInfo display)
+    public static List<int> OfferedRates(DisplayModeInfo display)
     {
         var rates = new List<int>();
         var mode = DevMode.Create();
