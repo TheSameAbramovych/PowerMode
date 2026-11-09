@@ -131,7 +131,7 @@ public sealed class FileLogTests
         using var dir = new TempDir();
         var blocker = dir.File("file-not-dir");
         File.WriteAllText(blocker, "x");
-        var log = new FileLog(blocker, TimeProvider.System);
+        var log = new FileLog(blocker, TimeProvider.System, dir.File("fallback"));
 
         Assert.Equal(0, new FileLog(dir.File("missing"), TimeProvider.System).Prune());
         log.Write("x", "cannot be written under a file");

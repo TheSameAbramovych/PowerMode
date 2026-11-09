@@ -48,8 +48,9 @@ internal static class Program
     private static int RunInstance(CliOptions options, string[] args)
     {
         // First, before anything that could wait: a start that never gets further still leaves a trace.
-        var log = new FileLog(AppPaths.LogDirectory, TimeProvider.System);
+        var log = LogSinks.Create();
         log.Write(TrayController.Category, string.Create(CultureInfo.InvariantCulture, $"Starting (pid {Environment.ProcessId}{(args.Length > 0 ? ", " + string.Join(' ', args) : string.Empty)})"));
+        log.Write(TrayController.Category, LogSinks.DescribeProcess());
 
         using var instance = new SingleInstance();
         if (!instance.TryAcquire(log))

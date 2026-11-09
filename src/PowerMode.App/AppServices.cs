@@ -29,7 +29,7 @@ internal sealed class AppServices : IDisposable
 {
     private AppServices()
     {
-        Log = new FileLog(AppPaths.LogDirectory, TimeProvider.System);
+        Log = LogSinks.Create();
         Log.Prune();
         Config = new ConfigStore(AppPaths.ConfigFile, Log);
         Config.Load();
