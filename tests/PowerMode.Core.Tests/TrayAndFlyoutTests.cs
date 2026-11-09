@@ -6,10 +6,10 @@ namespace PowerMode.Core.Tests;
 
 public sealed class TrayPromotionTests
 {
-    private const string Exe = @"C:\Users\bohda\AppData\Local\Programs\PowerMode\PowerMode.exe";
+    private const string Exe = @"C:\Users\alex\AppData\Local\Programs\PowerMode\PowerMode.exe";
     private static readonly Guid LocalAppData = Guid.Parse("F1B32785-6FBA-4FCF-9D55-7B8E7F157091");
 
-    private static string? Folders(Guid id) => id == LocalAppData ? @"C:\Users\bohda\AppData\Local" : null;
+    private static string? Folders(Guid id) => id == LocalAppData ? @"C:\Users\alex\AppData\Local" : null;
 
     [Fact]
     public void Our_hidden_entries_are_promoted_and_nobody_elses()
@@ -17,7 +17,7 @@ public sealed class TrayPromotionTests
         NotifyIconEntry[] entries =
         [
             new("1", @"C:\Program Files\Other\other.exe", 0),
-            new("2", @"c:\users\BOHDA\appdata\local\programs\powermode\powermode.exe", 0),
+            new("2", @"c:\users\ALEX\appdata\local\programs\powermode\powermode.exe", 0),
             new("3", "{F1B32785-6FBA-4FCF-9D55-7B8E7F157091}\\Programs\\PowerMode\\PowerMode.exe", null),
             new("4", "{F1B32785-6FBA-4FCF-9D55-7B8E7F157091}\\Programs\\PowerMode\\PowerMode.exe", 1),
             new("5", null, 0),
@@ -44,7 +44,7 @@ public sealed class TrayPromotionTests
 
     [Theory]
     [InlineData(@"C:\a\b.exe", @"C:\a\b.exe")]
-    [InlineData("{F1B32785-6FBA-4FCF-9D55-7B8E7F157091}\\Programs\\b.exe", @"C:\Users\bohda\AppData\Local\Programs\b.exe")]
+    [InlineData("{F1B32785-6FBA-4FCF-9D55-7B8E7F157091}\\Programs\\b.exe", @"C:\Users\alex\AppData\Local\Programs\b.exe")]
     [InlineData("{00000000-0000-0000-0000-000000000001}\\b.exe", null)]
     [InlineData("{not-a-guid}\\b.exe", null)]
     [InlineData("{F1B32785", null)]

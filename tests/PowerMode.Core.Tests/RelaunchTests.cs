@@ -8,7 +8,7 @@ public sealed class RelaunchTests
 {
     private const string ChatGptPath = @"C:\Program Files\WindowsApps\OpenAI.Codex_26.1103.4239.0_x64__2p2nqsd0c76g0\app\ChatGPT.exe";
     private const string ChatGptAumid = "OpenAI.Codex_2p2nqsd0c76g0!App";
-    private const string PostmanRoot = @"C:\Users\bohda\AppData\Local\Postman-Agent";
+    private const string PostmanRoot = @"C:\Users\alex\AppData\Local\Postman-Agent";
 
     [Fact]
     public void A_packaged_app_starts_through_its_aumid_without_its_versioned_path()
@@ -68,10 +68,10 @@ public sealed class RelaunchTests
     }
 
     [Theory]
-    [InlineData(@"C:\Users\bohda\AppData\Local\Postman-Agent\app-0.5.2\Postman Agent.exe", false, true)]
-    [InlineData(@"C:\Users\bohda\AppData\Local\Postman-Agent\app-0.5.2\Postman Agent.exe", true, false)]
-    [InlineData(@"C:\Users\bohda\AppData\Local\Postman-Agent\bin\Postman Agent.exe", true, true)]
-    [InlineData(@"C:\Users\bohda\AppData\Local\Postman-Agent\app-beta\Postman Agent.exe", true, true)]
+    [InlineData(@"C:\Users\alex\AppData\Local\Postman-Agent\app-0.5.2\Postman Agent.exe", false, true)]
+    [InlineData(@"C:\Users\alex\AppData\Local\Postman-Agent\app-0.5.2\Postman Agent.exe", true, false)]
+    [InlineData(@"C:\Users\alex\AppData\Local\Postman-Agent\bin\Postman Agent.exe", true, true)]
+    [InlineData(@"C:\Users\alex\AppData\Local\Postman-Agent\app-beta\Postman Agent.exe", true, true)]
     [InlineData(@"C:\x.exe", true, true)]
     [InlineData(@"C:\", true, true)]
     [InlineData(@"x.exe", true, true)]
