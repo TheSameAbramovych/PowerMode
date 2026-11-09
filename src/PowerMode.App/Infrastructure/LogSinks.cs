@@ -42,7 +42,7 @@ internal static class LogSinks
     private static string PackageNote() =>
         ProcessInfo.TryGetAppUserModelId(Environment.ProcessId) is { } package
             ? $"inside package {package} (writes to %LOCALAPPDATA% are redirected to its LocalCache)"
-            : "not packaged";
+            : "no package identity (a child of a packaged app can still be redirected; compare the data folder)";
 
     private static void WriteEventLog(string message)
     {
