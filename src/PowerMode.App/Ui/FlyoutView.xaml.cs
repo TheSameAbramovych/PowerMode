@@ -2,11 +2,12 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 using PowerMode.Core;
 
 namespace PowerMode.App.Ui;
 
-/// <summary>The flyout content. Used by the live window and by <c>--render-states</c>.</summary>
+/// <summary>The flyout content (lever table or Apps settings page). Used by the live window and by <c>--render-states</c>.</summary>
 internal sealed partial class FlyoutView : UserControl
 {
     public FlyoutView() => InitializeComponent();
@@ -16,6 +17,12 @@ internal sealed partial class FlyoutView : UserControl
     public event EventHandler? CloseRequested;
 
     public event EventHandler? ConfigRequested;
+
+    public event EventHandler? SettingsRequested;
+
+    public event EventHandler? BackRequested;
+
+    public event EventHandler? AddRequested;
 
     public event EventHandler? RestartElevatedRequested;
 
@@ -35,6 +42,21 @@ internal sealed partial class FlyoutView : UserControl
 
     private void OnConfig(object sender, RoutedEventArgs e) => ConfigRequested?.Invoke(this, EventArgs.Empty);
 
+    private void OnSettings(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnBack(object sender, RoutedEventArgs e) => BackRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnAdd(object sender, RoutedEventArgs e) => AddRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnAddKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            AddRequested?.Invoke(this, EventArgs.Empty);
+            e.Handled = true;
+        }
+    }
+
     private void OnRestartElevated(object sender, RoutedEventArgs e) => RestartElevatedRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnKeepDocker(object sender, RoutedEventArgs e) =>
@@ -52,6 +74,15 @@ internal sealed class NullToCollapsedConverter : IValueConverter
         var present = value is not null && (value is not string text || text.Length > 0);
         return targetType == typeof(bool) ? present : present ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => throw new NotSupportedException();
+}
+
+/// <summary>An empty text → Visible (a placeholder over an empty text box), anything else → Collapsed.</summary>
+internal sealed class EmptyToVisibleConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is null or "" ? Visibility.Visible : Visibility.Collapsed;
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => throw new NotSupportedException();
 }

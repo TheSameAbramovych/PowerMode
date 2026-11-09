@@ -2,11 +2,13 @@ using PowerMode.Core.Config;
 using PowerMode.Core.Levers;
 using PowerMode.Core.Model;
 using PowerMode.Core.Planning;
+using PowerMode.Core.Settings;
 using PowerMode.Core.State;
 
 namespace PowerMode.Core.Presentation;
 
-public sealed record RenderFixture(string FileName, FlyoutState State, bool LightTheme);
+/// <summary>A flyout state to render; with <see cref="Settings"/> the Apps settings page is shown instead of the lever table.</summary>
+public sealed record RenderFixture(string FileName, FlyoutState State, bool LightTheme, AppSettingsPage? Settings = null);
 
 /// <summary>Fake but realistic flyout states for <c>--render-states</c>. Built from the default config; touches nothing.</summary>
 public static class RenderFixtures
@@ -19,6 +21,11 @@ public static class RenderFixtures
     public const string StationFailed = "station-failed.png";
     public const string ReserveFailed = "reserve-failed.png";
     public const string ReserveLight = "reserve-light.png";
+    public const string SettingsApps = "settings-apps.png";
+    public const string SettingsAppsLight = "settings-apps-light.png";
+
+    /// <summary>An app with a long name, closed in Reserve, so the settings render shows how such a name wraps.</summary>
+    public const string LongName = "Adobe Creative Cloud Experience";
 
     /// <summary>A fixed afternoon so the renders are reproducible.</summary>
     public static readonly DateTimeOffset Now = new(2026, 11, 9, 15, 5, 0, TimeSpan.FromHours(2));
@@ -63,7 +70,29 @@ public static class RenderFixtures
                 reserveLive with { GpuWatts = 19 },
                 isElevated: false), false),
             new(ReserveLight, Build(config, PowerModeKind.Reserve, snapshot, _ => { }, [], reserveLive, isElevated: true), true),
+            new(SettingsApps, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), false, SettingsPage(config)),
+            new(SettingsAppsLight, Build(config, PowerModeKind.Station, snapshot, _ => { }, [], stationLive, isElevated: true), true, SettingsPage(config)),
         ];
+    }
+
+    /// <summary>
+    /// The Apps settings page over the given config, with Telegram set to efficiency mode in Station too and a few
+    /// running apps, one with a long name that Reserve closes. The config itself is not changed.
+    /// </summary>
+    public static AppSettingsPage SettingsPage(AppConfig config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        var copy = ConfigLoader.Parse(ConfigLoader.Serialize(config)).Config!;
+        AppSettings.SetChoice(copy.Modes.Station, "Telegram", AppChoice.Efficiency);
+        AppSettings.SetChoice(copy.Modes.Reserve, LongName, AppChoice.Close);
+        RunningApp[] running =
+        [
+            new("discord", HasWindow: true, IsSystem: false),
+            new(LongName, HasWindow: true, IsSystem: false),
+            new("Code", HasWindow: true, IsSystem: false),
+            new("explorer", HasWindow: true, IsSystem: true),
+        ];
+        return AppSettings.Build(copy, running);
     }
 
     /// <summary>The owner's PC as measured on 2026-11-09.</summary>

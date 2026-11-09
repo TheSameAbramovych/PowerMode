@@ -117,6 +117,63 @@ internal static class ProcessInfo
         }
     }
 
+    /// <summary>
+    /// Processes of this user session for the Apps settings page, one per name: whether any of them has a visible
+    /// top-level window, and whether it is a system process (image under the Windows folder, or unreadable).
+    /// </summary>
+    public static List<Core.Settings.RunningApp> RunningApps()
+    {
+        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        var self = Environment.ProcessId;
+        int session;
+        using (var current = Process.GetCurrentProcess())
+        {
+            session = current.SessionId;
+        }
+
+        var processes = Process.GetProcesses();
+        try
+        {
+            return [.. processes
+                .Where(p => SessionOf(p) == session && p.Id != self)
+                .GroupBy(p => p.ProcessName, StringComparer.OrdinalIgnoreCase)
+                .Select(g =>
+                {
+                    var path = g.Select(p => TryGetPath(p.Id)).FirstOrDefault(p => p is not null);
+                    var isSystem = path is null || path.StartsWith(windows + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+                    return new Core.Settings.RunningApp(g.Key, g.Any(HasWindow), isSystem);
+                })];
+        }
+        finally
+        {
+            DisposeAll(processes);
+        }
+    }
+
+    private static int SessionOf(Process process)
+    {
+        try
+        {
+            return process.SessionId;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
+        {
+            return -1;
+        }
+    }
+
+    private static bool HasWindow(Process process)
+    {
+        try
+        {
+            return process.MainWindowHandle != IntPtr.Zero;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     public static void DisposeAll(IEnumerable<Process> processes)
     {
         foreach (var process in processes)

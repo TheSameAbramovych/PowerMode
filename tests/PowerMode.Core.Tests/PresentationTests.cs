@@ -3,6 +3,7 @@ using PowerMode.Core.Levers;
 using PowerMode.Core.Model;
 using PowerMode.Core.Planning;
 using PowerMode.Core.Presentation;
+using PowerMode.Core.Settings;
 using PowerMode.Core.Switching;
 
 namespace PowerMode.Core.Tests;
@@ -284,9 +285,16 @@ public sealed class PresentationTests
         Assert.Equal(
             [
                 RenderFixtures.Grid, RenderFixtures.GridRestored, RenderFixtures.Station, RenderFixtures.Reserve, RenderFixtures.StationApplying,
-                RenderFixtures.StationFailed, RenderFixtures.ReserveFailed, RenderFixtures.ReserveLight,
+                RenderFixtures.StationFailed, RenderFixtures.ReserveFailed, RenderFixtures.ReserveLight, RenderFixtures.SettingsApps, RenderFixtures.SettingsAppsLight,
             ],
             fixtures.Select(f => f.FileName));
+
+        Assert.All(fixtures.Where(f => f.FileName.StartsWith("settings", StringComparison.Ordinal)), f => Assert.NotNull(f.Settings));
+        var page = fixtures.Single(f => f.FileName == RenderFixtures.SettingsApps).Settings!;
+        Assert.Equal(AppChoice.Efficiency, page.Rows.Single(r => r.Name == "Telegram").Station);
+        Assert.Contains(page.Rows, r => r.Name == "discord" && r.Station == AppChoice.Keep);
+        Assert.DoesNotContain(page.Rows, r => r.Name == "explorer");
+        Assert.Equal(AppChoice.Keep, AppSettings.ChoiceOf(Config.Modes.Station, "Telegram"));
 
         var reserveFailed = fixtures.Single(f => f.FileName == RenderFixtures.ReserveFailed).State;
         Assert.Equal("GPU limit and services need administrator rights.", reserveFailed.Banner);

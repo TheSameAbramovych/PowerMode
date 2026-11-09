@@ -20,9 +20,11 @@ internal abstract class ObservableObject : INotifyPropertyChanged
         }
 
         field = value;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        Raise(name);
         return true;
     }
+
+    protected void Raise(string? name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
 internal sealed class ModeItem : ObservableObject
@@ -121,6 +123,7 @@ internal sealed class FlyoutViewModel : ObservableObject
     private string? _banner;
     private string _footer = string.Empty;
     private bool _startWithWindows;
+    private bool _isSettingsOpen;
 
     public FlyoutViewModel()
     {
@@ -141,6 +144,23 @@ internal sealed class FlyoutViewModel : ObservableObject
     public string Footer { get => _footer; set => Set(ref _footer, value); }
 
     public bool StartWithWindows { get => _startWithWindows; set => Set(ref _startWithWindows, value); }
+
+    public SettingsViewModel Settings { get; } = new();
+
+    /// <summary>The Apps settings page replaces the lever table.</summary>
+    public bool IsSettingsOpen
+    {
+        get => _isSettingsOpen;
+        set
+        {
+            if (Set(ref _isSettingsOpen, value))
+            {
+                Raise(nameof(IsMainOpen));
+            }
+        }
+    }
+
+    public bool IsMainOpen => !_isSettingsOpen;
 
     public void ApplyTheme(bool light)
     {
@@ -185,6 +205,8 @@ internal static class Glyphs
     public const string Settings = "";
     public const string Close = "";
     public const string Shield = "";
+
+    public const string Back = "";
 
     public static string ForMode(PowerModeKind mode) => mode switch
     {

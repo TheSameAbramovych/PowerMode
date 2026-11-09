@@ -10,161 +10,265 @@
              TextOptions.TextFormattingMode="Display"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-        <StackPanel Margin="16,8,12,8">
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False"
+                      Visibility="{Binding IsMainOpen, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel Margin="16,8,12,8">
 
-            <!-- 1. Header -->
-            <Grid Margin="0,0,0,4">
-                <TextBlock Text="PowerMode" FontFamily="{StaticResource PmDisplayFont}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Settings}" ToolTip="Open config" Click="OnConfig" />
-                    <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Close}" ToolTip="Close (Esc)" Click="OnClose" Margin="2,0,0,0" />
-                </StackPanel>
-            </Grid>
+                <!-- 1. Header -->
+                <Grid Margin="0,0,0,4">
+                    <TextBlock Text="PowerMode" FontFamily="{StaticResource PmDisplayFont}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Settings}" ToolTip="Apps settings" Click="OnSettings" />
+                        <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Close}" ToolTip="Close (Esc)" Click="OnClose" Margin="2,0,0,0" />
+                    </StackPanel>
+                </Grid>
 
-            <!-- 2. Mode selector -->
-            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="1" CornerRadius="8" Padding="2" Margin="0,0,4,0">
-                <ItemsControl ItemsSource="{Binding Modes}" Focusable="False">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <UniformGrid Rows="1" Columns="3" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Button Style="{StaticResource PmModeButton}" ToolTip="{Binding Shortcut}" Click="OnMode" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </Border>
+                <!-- 2. Mode selector -->
+                <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="1" CornerRadius="8" Padding="2" Margin="0,0,4,0">
+                    <ItemsControl ItemsSource="{Binding Modes}" Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="1" Columns="3" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource PmModeButton}" ToolTip="{Binding Shortcut}" Click="OnMode" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
 
-            <!-- 3. Status line -->
-            <TextBlock Text="{Binding StatusLine}" FontSize="13" Margin="0,6,4,0" TextWrapping="Wrap">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="{DynamicResource PmMuted}" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding StatusIsWarning}" Value="True">
-                                <Setter Property="Foreground" Value="{DynamicResource PmWarning}" />
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
+                <!-- 3. Status line -->
+                <TextBlock Text="{Binding StatusLine}" FontSize="13" Margin="0,6,4,0" TextWrapping="Wrap">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource PmMuted}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StatusIsWarning}" Value="True">
+                                    <Setter Property="Foreground" Value="{DynamicResource PmWarning}" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
 
-            <!-- 6. Elevation banner -->
-            <Border Background="{DynamicResource PmWarningFill}" CornerRadius="6" Padding="10,4" Margin="0,6,4,0"
-                    Visibility="{Binding Banner, Converter={StaticResource NullToCollapsed}}">
-                <!-- One row: glyph · text (wraps) · button, vertically centred. -->
-                <Grid>
+                <!-- 6. Elevation banner -->
+                <Border Background="{DynamicResource PmWarningFill}" CornerRadius="6" Padding="10,4" Margin="0,6,4,0"
+                        Visibility="{Binding Banner, Converter={StaticResource NullToCollapsed}}">
+                    <!-- One row: glyph · text (wraps) · button, vertically centred. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{x:Static ui:Glyphs.Warning}" FontFamily="{StaticResource PmIconFont}" FontSize="14"
+                                   Foreground="{DynamicResource PmWarning}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{Binding Banner}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <Button Grid.Column="2" Style="{StaticResource PmAccentButton}" Content="Restart as administrator"
+                                VerticalAlignment="Center" Margin="8,0,0,0" Click="OnRestartElevated" />
+                    </Grid>
+                </Border>
+
+                <!-- 4. Lever table -->
+                <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,1,0,0" Margin="0,6,4,0">
+                    <ItemsControl ItemsSource="{Binding Rows}" Focusable="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type ui:RowViewModel}">
+                                <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" MinHeight="40" Padding="0,4,0,4">
+                                    <Grid VerticalAlignment="Center">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="84" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Title}" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="0,1,0,0" VerticalAlignment="Top" />
+                                        <StackPanel Grid.Column="1" Margin="0,0,10,0" VerticalAlignment="Top">
+                                            <ItemsControl ItemsSource="{Binding Lines}" Focusable="False">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <ItemsControl ItemsSource="{Binding Converter={StaticResource FactTokens}}" Focusable="False">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <ui:FactPanel />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding Text}" FontSize="13" TextWrapping="Wrap" LineHeight="16" LineStackingStrategy="BlockLineHeight" />
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock Text="{Binding FailureReason}" FontSize="12" TextWrapping="Wrap" LineHeight="15" LineStackingStrategy="BlockLineHeight"
+                                                       Foreground="{DynamicResource PmWarning}"
+                                                       Visibility="{Binding FailureReason, Converter={StaticResource NullToCollapsed}}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Top">
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding Live}" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Top" Margin="0,1,0,0" />
+                                                <TextBlock x:Name="StatusGlyph" Width="16" Height="16" FontSize="14" Margin="8,1,0,0" TextAlignment="Center"
+                                                           FontFamily="{StaticResource PmIconFont}" RenderTransformOrigin="0.5,0.5"
+                                                           ToolTip="{Binding FailureReason}" ToolTipService.IsEnabled="{Binding FailureReason, Converter={StaticResource NullToCollapsed}}">
+                                                    <TextBlock.RenderTransform>
+                                                        <RotateTransform x:Name="Spin" Angle="0" />
+                                                    </TextBlock.RenderTransform>
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <CheckBox Style="{StaticResource PmSwitch}" Content="Keep running" IsChecked="{Binding KeepDocker, Mode=TwoWay}"
+                                                      HorizontalAlignment="Right" Margin="0,4,0,0" Click="OnKeepDocker"
+                                                      Visibility="{Binding ShowKeepDocker, Converter={StaticResource BoolToVisibility}}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding Glyph}" Value="{x:Static presentation:RowGlyph.Ok}">
+                                        <Setter TargetName="StatusGlyph" Property="Text" Value="{x:Static ui:Glyphs.Check}" />
+                                        <Setter TargetName="StatusGlyph" Property="Foreground" Value="{DynamicResource PmOk}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Glyph}" Value="{x:Static presentation:RowGlyph.Failed}">
+                                        <Setter TargetName="StatusGlyph" Property="Text" Value="{x:Static ui:Glyphs.Warning}" />
+                                        <Setter TargetName="StatusGlyph" Property="Foreground" Value="{DynamicResource PmWarning}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Glyph}" Value="{x:Static presentation:RowGlyph.Applying}">
+                                        <Setter TargetName="StatusGlyph" Property="Text" Value="{x:Static ui:Glyphs.Sync}" />
+                                        <Setter TargetName="StatusGlyph" Property="Foreground" Value="{DynamicResource PmAccent}" />
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard x:Name="Spinning">
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetName="Spin" Storyboard.TargetProperty="Angle"
+                                                                     From="0" To="360" Duration="0:0:1" RepeatBehavior="Forever" />
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                        <DataTrigger.ExitActions>
+                                            <StopStoryboard BeginStoryboardName="Spinning" />
+                                        </DataTrigger.ExitActions>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+                <!-- 5. Footer -->
+                <Grid Margin="0,8,4,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{x:Static ui:Glyphs.Warning}" FontFamily="{StaticResource PmIconFont}" FontSize="14"
-                               Foreground="{DynamicResource PmWarning}" Margin="0,0,8,0" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="{Binding Banner}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
-                    <Button Grid.Column="2" Style="{StaticResource PmAccentButton}" Content="Restart as administrator"
-                            VerticalAlignment="Center" Margin="8,0,0,0" Click="OnRestartElevated" />
+                    <TextBlock Text="{Binding Footer}" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center"
+                               TextWrapping="Wrap" Margin="0,0,8,0" />
+                    <CheckBox Grid.Column="1" Style="{StaticResource PmSwitch}" Content="Start with Windows" IsChecked="{Binding StartWithWindows, Mode=TwoWay}"
+                              VerticalAlignment="Center" Click="OnStartWithWindows" />
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Apps settings page: replaces the lever table; only its app list scrolls. -->
+        <StackPanel Margin="16,8,12,8" Visibility="{Binding IsSettingsOpen, Converter={StaticResource BoolToVisibility}}">
+            <Grid Margin="0,0,0,2">
+                <StackPanel Orientation="Horizontal">
+                    <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Back}" ToolTip="Back (Esc)" Click="OnBack" Margin="-6,0,2,0" />
+                    <TextBlock Text="Apps" FontFamily="{StaticResource PmDisplayFont}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
+                </StackPanel>
+                <Button Style="{StaticResource PmIconButton}" Content="{x:Static ui:Glyphs.Close}" ToolTip="Close" Click="OnClose" HorizontalAlignment="Right" />
+            </Grid>
+            <TextBlock Text="What Station and Reserve do with each app. A change for the current mode applies at once."
+                       FontSize="12" Foreground="{DynamicResource PmMuted}" TextWrapping="Wrap" Margin="0,0,4,8" />
+
+            <Grid Margin="0,0,4,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                    <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="App" FontSize="12" Foreground="{DynamicResource PmMuted}" />
+                <TextBlock Grid.Column="1" Text="Station" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="8,0,0,0" />
+                <TextBlock Grid.Column="2" Text="Reserve" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="8,0,0,0" />
+            </Grid>
+
+            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,1,0,1" Margin="0,0,4,0">
+                <Grid MinHeight="44">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                        <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Wallpaper Engine" FontSize="13" TextWrapping="Wrap" />
+                        <TextBlock Text="wallpaper64.exe" FontSize="11" Foreground="{DynamicResource PmMuted}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="1" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                              SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="Wallpaper Engine in Station"
+                              ItemsSource="{x:Static ui:SettingsViewModel.WallpaperChoices}" SelectedValue="{Binding Settings.PauseWallpaperStation}" />
+                    <ComboBox Grid.Column="2" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                              SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="Wallpaper Engine in Reserve"
+                              ItemsSource="{x:Static ui:SettingsViewModel.WallpaperChoices}" SelectedValue="{Binding Settings.PauseWallpaperReserve}" />
                 </Grid>
             </Border>
 
-            <!-- 4. Lever table -->
-            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,1,0,0" Margin="0,6,4,0">
-                <ItemsControl ItemsSource="{Binding Rows}" Focusable="False">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type ui:RowViewModel}">
-                            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" MinHeight="40" Padding="0,4,0,4">
-                                <Grid VerticalAlignment="Center">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="84" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{Binding Title}" FontSize="12" Foreground="{DynamicResource PmMuted}" Margin="0,1,0,0" VerticalAlignment="Top" />
-                                    <StackPanel Grid.Column="1" Margin="0,0,10,0" VerticalAlignment="Top">
-                                        <ItemsControl ItemsSource="{Binding Lines}" Focusable="False">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <ItemsControl ItemsSource="{Binding Converter={StaticResource FactTokens}}" Focusable="False">
-                                                        <ItemsControl.ItemsPanel>
-                                                            <ItemsPanelTemplate>
-                                                                <ui:FactPanel />
-                                                            </ItemsPanelTemplate>
-                                                        </ItemsControl.ItemsPanel>
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <TextBlock Text="{Binding Text}" FontSize="13" TextWrapping="Wrap" LineHeight="16" LineStackingStrategy="BlockLineHeight" />
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                        <TextBlock Text="{Binding FailureReason}" FontSize="12" TextWrapping="Wrap" LineHeight="15" LineStackingStrategy="BlockLineHeight"
-                                                   Foreground="{DynamicResource PmWarning}"
-                                                   Visibility="{Binding FailureReason, Converter={StaticResource NullToCollapsed}}" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="2" VerticalAlignment="Top">
-                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                            <TextBlock Text="{Binding Live}" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Top" Margin="0,1,0,0" />
-                                            <TextBlock x:Name="StatusGlyph" Width="16" Height="16" FontSize="14" Margin="8,1,0,0" TextAlignment="Center"
-                                                       FontFamily="{StaticResource PmIconFont}" RenderTransformOrigin="0.5,0.5"
-                                                       ToolTip="{Binding FailureReason}" ToolTipService.IsEnabled="{Binding FailureReason, Converter={StaticResource NullToCollapsed}}">
-                                                <TextBlock.RenderTransform>
-                                                    <RotateTransform x:Name="Spin" Angle="0" />
-                                                </TextBlock.RenderTransform>
-                                            </TextBlock>
+            <!-- A divider closes the list, also when its last visible row is cut by scrolling. -->
+            <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" Margin="0,0,4,0">
+                <ScrollViewer MaxHeight="{StaticResource PmAppListHeight}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                              Focusable="False" Margin="0,0,-12,0">
+                    <!-- The scroll bar sits in the 12 px to the right of the columns, never over a choice box. -->
+                    <ItemsControl ItemsSource="{Binding Settings.Rows}" Focusable="False" Margin="0,0,12,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type ui:AppRowViewModel}">
+                                <Border BorderBrush="{DynamicResource PmDivider}" BorderThickness="0,0,0,1" MinHeight="44" Padding="0,3">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                                            <ColumnDefinition Width="{StaticResource PmChoiceColumn}" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="13" TextWrapping="Wrap" LineHeight="16" LineStackingStrategy="BlockLineHeight" />
+                                            <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="{DynamicResource PmMuted}" TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
-                                        <CheckBox Style="{StaticResource PmSwitch}" Content="Keep running" IsChecked="{Binding KeepDocker, Mode=TwoWay}"
-                                                  HorizontalAlignment="Right" Margin="0,4,0,0" Click="OnKeepDocker"
-                                                  Visibility="{Binding ShowKeepDocker, Converter={StaticResource BoolToVisibility}}" />
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-                            <DataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding Glyph}" Value="{x:Static presentation:RowGlyph.Ok}">
-                                    <Setter TargetName="StatusGlyph" Property="Text" Value="{x:Static ui:Glyphs.Check}" />
-                                    <Setter TargetName="StatusGlyph" Property="Foreground" Value="{DynamicResource PmOk}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding Glyph}" Value="{x:Static presentation:RowGlyph.Failed}">
-                                    <Setter TargetName="StatusGlyph" Property="Text" Value="{x:Static ui:Glyphs.Warning}" />
-                                    <Setter TargetName="StatusGlyph" Property="Foreground" Value="{DynamicResource PmWarning}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding Glyph}" Value="{x:Static presentation:RowGlyph.Applying}">
-                                    <Setter TargetName="StatusGlyph" Property="Text" Value="{x:Static ui:Glyphs.Sync}" />
-                                    <Setter TargetName="StatusGlyph" Property="Foreground" Value="{DynamicResource PmAccent}" />
-                                    <DataTrigger.EnterActions>
-                                        <BeginStoryboard x:Name="Spinning">
-                                            <Storyboard>
-                                                <DoubleAnimation Storyboard.TargetName="Spin" Storyboard.TargetProperty="Angle"
-                                                                 From="0" To="360" Duration="0:0:1" RepeatBehavior="Forever" />
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </DataTrigger.EnterActions>
-                                    <DataTrigger.ExitActions>
-                                        <StopStoryboard BeginStoryboardName="Spinning" />
-                                    </DataTrigger.ExitActions>
-                                </DataTrigger>
-                            </DataTemplate.Triggers>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                                        <ComboBox Grid.Column="1" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                                  SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="{Binding DisplayName, StringFormat={}{0} in Station}"
+                                                  ItemsSource="{x:Static ui:SettingsViewModel.AppChoices}" SelectedValue="{Binding Station}" />
+                                        <ComboBox Grid.Column="2" Margin="8,0,0,0" Height="30" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                                  SelectedValuePath="Value" DisplayMemberPath="Label" AutomationProperties.Name="{Binding DisplayName, StringFormat={}{0} in Reserve}"
+                                                  ItemsSource="{x:Static ui:SettingsViewModel.AppChoices}" SelectedValue="{Binding Reserve}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
             </Border>
 
-            <!-- 5. Footer -->
-            <Grid Margin="0,8,4,0">
+            <Grid Margin="0,10,4,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="{Binding Footer}" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center"
-                           TextWrapping="Wrap" Margin="0,0,8,0" />
-                <CheckBox Grid.Column="1" Style="{StaticResource PmSwitch}" Content="Start with Windows" IsChecked="{Binding StartWithWindows, Mode=TwoWay}"
-                          VerticalAlignment="Center" Click="OnStartWithWindows" />
+                <TextBox x:Name="AddBox" Text="{Binding Settings.AddText, UpdateSourceTrigger=PropertyChanged}" FontSize="13" VerticalContentAlignment="Center"
+                         AutomationProperties.Name="Add process" KeyDown="OnAddKey" />
+                <TextBlock Text="Add process… (name without .exe)" FontSize="13" Foreground="{DynamicResource PmMuted}" IsHitTestVisible="False"
+                           VerticalAlignment="Center" Margin="12,0,0,0"
+                           Visibility="{Binding Settings.AddText, Converter={StaticResource EmptyToVisible}}" />
+                <Button Grid.Column="1" Style="{StaticResource PmAccentButton}" Content="Add" Margin="8,0,0,0" Padding="16,6" Click="OnAdd" />
+            </Grid>
+            <TextBlock Text="{Binding Settings.Message}" FontSize="12" Foreground="{DynamicResource PmWarning}" TextWrapping="Wrap" Margin="0,4,4,0"
+                       Visibility="{Binding Settings.Message, Converter={StaticResource NullToCollapsed}}" />
+
+            <Grid Margin="0,10,4,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Services, levers and the rest" FontSize="12" Foreground="{DynamicResource PmMuted}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Style="{StaticResource PmLinkButton}" Content="Open config.json" Click="OnConfig" />
             </Grid>
         </StackPanel>
-    </ScrollViewer>
+    </Grid>
 </UserControl>

@@ -10,7 +10,8 @@ namespace PowerMode.App.Ui;
 
 /// <summary>
 /// Borderless 380 px flyout, height to content (max 600), DWM rounded corners + 1 px border, anchored to a
-/// corner of the work area. Hides on deactivation or Esc; 1/2/3 switch modes.
+/// corner of the work area. Hides on deactivation or Esc (Esc leaves the Apps settings page first); 1/2/3 switch
+/// modes on the lever table (not on the settings page, where they are typed).
 /// </summary>
 internal sealed class FlyoutWindow : Window
 {
@@ -109,12 +110,22 @@ internal sealed class FlyoutWindow : Window
             Key.D3 or Key.NumPad3 => 2,
             _ => -1,
         };
+        var settings = View.DataContext is FlyoutViewModel { IsSettingsOpen: true } model ? model : null;
         if (e.Key == Key.Escape)
         {
-            HideFlyout();
+            // Esc leaves the Apps settings page first, then closes the flyout.
+            if (settings is not null)
+            {
+                settings.IsSettingsOpen = false;
+            }
+            else
+            {
+                HideFlyout();
+            }
+
             e.Handled = true;
         }
-        else if (index >= 0)
+        else if (index >= 0 && settings is null)
         {
             ModeKey?.Invoke(this, ModeNames.All[index]);
             e.Handled = true;

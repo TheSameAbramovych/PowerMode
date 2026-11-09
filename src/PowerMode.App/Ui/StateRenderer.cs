@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using PowerMode.Core;
 using PowerMode.Core.Presentation;
+using PowerMode.Core.Settings;
 
 namespace PowerMode.App.Ui;
 
@@ -28,7 +29,7 @@ internal static class StateRenderer
         foreach (var fixture in RenderFixtures.All())
         {
             var path = Path.Combine(directory, fixture.FileName);
-            var (bitmap, height) = RenderFlyout(app, fixture.State, fixture.LightTheme);
+            var (bitmap, height) = RenderFlyout(app, fixture.State, fixture.LightTheme, fixture.Settings);
             IconRenderer.SavePng(bitmap, path);
             written.Add(string.Create(CultureInfo.InvariantCulture, $"{path} ({height:0} of {FlyoutWindow.MaxFlyoutHeight:0} px)"));
             if (height > FlyoutWindow.MaxFlyoutHeight)
@@ -51,8 +52,8 @@ internal static class StateRenderer
         return new RenderReport(written, overflows);
     }
 
-    /// <summary>The framed flyout as the window shows it, and the height its content needs without the window's maximum.</summary>
-    public static (BitmapSource Bitmap, double ContentHeight) RenderFlyout(App app, FlyoutState state, bool light)
+    /// <summary>The framed flyout as the window shows it (the Apps settings page when <paramref name="settings"/> is set), and the height its content needs without the window's maximum.</summary>
+    public static (BitmapSource Bitmap, double ContentHeight) RenderFlyout(App app, FlyoutState state, bool light, AppSettingsPage? settings = null)
     {
         ArgumentNullException.ThrowIfNull(app);
         app.ThemeMode = light ? ThemeMode.Light : ThemeMode.Dark;
@@ -60,6 +61,11 @@ internal static class StateRenderer
         var model = new FlyoutViewModel();
         model.ApplyTheme(light);
         model.Update(state);
+        if (settings is not null)
+        {
+            model.Settings.Load(settings);
+            model.IsSettingsOpen = true;
+        }
 
         // The live window gets its rounded corners and 1 px border from DWM; draw the same frame here.
         var frame = new Border

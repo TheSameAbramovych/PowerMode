@@ -41,6 +41,7 @@ internal sealed class TrayController : IDisposable
     private readonly DispatcherTimer _displayDebounce;
     private SingleInstance _instance;
     private readonly SwitchScheduler _queue;
+    private readonly SettingsController _settings;
     private SwitchInProgress? _progress;
     private bool _readingLive;
     private bool _disposed;
@@ -56,6 +57,7 @@ internal sealed class TrayController : IDisposable
         _arguments = arguments;
         _hotkeys = new HotkeyManager(services.Log);
         _queue = new SwitchScheduler(RunSwitchAsync, Shutdown, RestartElevated, services.Log);
+        _settings = new SettingsController(services, _model, Refresh);
         var view = new FlyoutView { DataContext = _model };
         _flyout = new FlyoutWindow(view, () => _services.Config.Current.Flyout);
         _liveTimer = new DispatcherTimer(TooltipRefresh, DispatcherPriority.Background, async (_, _) => await RefreshLiveAsync(), _app.Dispatcher);
@@ -92,6 +94,9 @@ internal sealed class TrayController : IDisposable
         view.ModeRequested += (_, mode) => _ = SwitchAsync(mode);
         view.CloseRequested += (_, _) => _flyout.HideFlyout();
         view.ConfigRequested += (_, _) => OpenConfig();
+        view.SettingsRequested += async (_, _) => await _settings.OpenAsync();
+        view.BackRequested += (_, _) => _settings.Close();
+        view.AddRequested += async (_, _) => await _settings.AddAsync();
         view.RestartElevatedRequested += (_, _) => _queue.RestartElevated();
         view.KeepDockerChanged += async (_, keep) => await SetKeepDockerAsync(keep);
         view.StartWithWindowsChanged += async (_, on) => await SetAutostartAsync(on);
@@ -249,6 +254,11 @@ internal sealed class TrayController : IDisposable
         {
             _ = RefreshLiveAsync();
         }
+        else
+        {
+            // The next open shows the lever table again.
+            _settings.Close();
+        }
     }
 
     private void ToggleFlyout()
@@ -364,6 +374,11 @@ internal sealed class TrayController : IDisposable
     {
         _hotkeys.Register(_services.Config.Current.Hotkeys);
         Refresh();
+        if (_model.IsSettingsOpen)
+        {
+            // Edited in the file while the page is open: show the file's lists.
+            _ = _settings.ReloadAsync();
+        }
     }
 
     private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
