@@ -30,9 +30,14 @@ internal static class Palette
     public const string SeriesMonitor = "PmSeriesMonitor";
     public const string SeriesOther = "PmSeriesOther";
 
-    /// <summary>Tray icon colours, fixed by the spec (they sit on the taskbar, not the flyout).</summary>
-    public static readonly Color TrayStation = Color.FromRgb(0xF2, 0xB8, 0x3C);
-    public static readonly Color TrayReserve = Color.FromRgb(0xFF, 0x6B, 0x6B);
+    /// <summary>
+    /// Tray icon colours of the saving modes per taskbar theme (they sit on the taskbar, not the flyout), like Grid's:
+    /// the light-taskbar ones keep at least 5:1 on <see cref="TaskbarLight"/>.
+    /// </summary>
+    public static readonly Color TrayStationOnDark = Color.FromRgb(0xF2, 0xB8, 0x3C);
+    public static readonly Color TrayStationOnLight = Color.FromRgb(0x8F, 0x5A, 0x00);
+    public static readonly Color TrayReserveOnDark = Color.FromRgb(0xFF, 0x6B, 0x6B);
+    public static readonly Color TrayReserveOnLight = Color.FromRgb(0xC4, 0x2B, 0x1C);
 
     /// <summary>Grid on the taskbar: the accent blue, so a running PowerMode in Grid looks "on" too.</summary>
     public static readonly Color TrayGridOnDark = Color.FromRgb(0x4C, 0xC2, 0xFF);

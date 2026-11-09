@@ -82,8 +82,9 @@ Tray-only app, no taskbar window. Follow the Windows theme (light/dark) with WPF
 **Tray icon** — crisp at 100/125/150/200 % DPI, drawn in code (Segoe Fluent Icons glyph or geometry →
 `System.Drawing.Icon`; no bitmap assets), always in colour so a running PowerMode looks "on": Grid = plug
 glyph in blue (`#4CC2FF` on a dark taskbar, `#005FB8` on a light one, following `SystemUsesLightTheme`);
-Station = battery glyph, amber `#F2B83C`, with a small filled dot; Reserve = low-battery glyph, red
-`#FF6B6B`, with the dot. While applying: the orbiting spinner dot instead. Tooltip:
+Station = battery glyph, amber (`#F2B83C` on a dark taskbar, `#8F5A00` on a light one), with a small filled
+dot; Reserve = low-battery glyph, red (`#FF6B6B` on a dark taskbar, `#C42B1C` on a light one), with the dot; both
+follow `SystemUsesLightTheme` like Grid. While applying: the orbiting spinner dot instead. Tooltip:
 `PowerMode · Station · ≈ 142 W` (the estimated total), while applying `PowerMode · Applying Station… · ≈ 142 W`.
 **Taskbar promotion**: Windows 11 (22H2+) puts a new icon into the overflow. After the icon is created (and
 once more 2 s later if Windows has not written its entry yet) PowerMode sets `IsPromoted = 1` on its own

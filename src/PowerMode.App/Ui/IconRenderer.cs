@@ -27,8 +27,8 @@ internal static class IconRenderer
     {
         var color = mode switch
         {
-            PowerModeKind.Station => Palette.TrayStation,
-            PowerModeKind.Reserve => Palette.TrayReserve,
+            PowerModeKind.Station => lightTaskbar ? Palette.TrayStationOnLight : Palette.TrayStationOnDark,
+            PowerModeKind.Reserve => lightTaskbar ? Palette.TrayReserveOnLight : Palette.TrayReserveOnDark,
             _ => lightTaskbar ? Palette.TrayGridOnLight : Palette.TrayGridOnDark,
         };
         var brush = new SolidColorBrush(color);
