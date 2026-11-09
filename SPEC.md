@@ -22,7 +22,7 @@ was there before).
 | Power schemes | `381b4222-f694-41f0-9685-ff5bb260df2e` Balanced, `8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c` High performance, `9897998c-92de-4669-853f-b7cd3ecb2790` **AMD Ryzen Balanced (active)**, `a1841308-3541-4fab-bc81-f71556f20b4a` Power saver. Scheme names are localized (Ukrainian) — never match by name, only by GUID |
 | powercfg | `/setacvalueindex` and `/change` work **without admin** (verified). `PROCTHROTTLEMAX` AC = 100. `PERFBOOSTMODE` (`be337238-0d82-4146-a960-4f3749d470c7`) is a hidden attribute: not listed by `/q`, but `/setacvalueindex` still sets it. No Energy Saver subgroup exposed. Display-off / sleep / hibernate timeouts on AC are all 0 (never). Hibernate is available (`powercfg /a`) |
 | Docker | Docker Desktop 29.7.2 with WSL2 backend (`vmmemWSL` ≈ 8.3 GB). CLI plugin `docker desktop start|stop|restart|status` exists (v0.4.3). Running containers: `p365-kafka`, `p365-zookeeper`, `p365-redis`, `qm-sonar`, `qm-sonar-db`, `gitlab-runner` (the owner's local GitLab CI runner) |
-| Heavy background apps | **Wallpaper Engine** (`C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\wallpaper64.exe`, GPU process, supports `wallpaper64.exe -control pause|play`), Chrome (32 procs), Claude, ChatGPT desktop, Slack, Telegram, Postman Agent, Steam (autostart, not running now), OneDrive (autostart), Viber, Teams, EPSDNMON (Epson), Phone Link |
+| Heavy background apps | **Wallpaper Engine** (`C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\wallpaper64.exe`, GPU process, supports `wallpaper64.exe -control pause|play`), Chrome (32 procs), ChatGPT desktop, Slack, Telegram, Postman Agent, Steam (autostart, not running now), OneDrive (autostart), Viber, Teams, EPSDNMON (Epson), Phone Link |
 | Local DB services | `MongoDB`, `MySQL80`, `postgresql-x64-18` (all Automatic, running) |
 | Other services | `WSearch` running, `SysMain` running, `DiagTrack` running, `Spooler` running, `com.docker.service` stopped/manual |
 | Shell user | not elevated. Admin is needed only for: NVML power limit, start/stop of Windows services |
@@ -162,7 +162,7 @@ Engine is not installed). File names wrap (before the extension), never cut with
 - Rows: every name in any `closeApps`/`efficiencyApps`, plus processes of the user's session that have a
   visible top-level window or are in a catalogue of common background apps (Steam, Discord, Spotify,
   Telegram, Slack, Viber, Teams, ChatGPT, OneDrive, Postman Agent, EPSDNMON, Epic Games Launcher,
-  Battle.net, Chrome, Edge, Edge WebView2, Phone Link, Cross Device, Claude, VS Code, IntelliJ IDEA,
+  Battle.net, Chrome, Edge, Edge WebView2, Phone Link, Cross Device, VS Code, IntelliJ IDEA,
   Rider, WebStorm, Zoom), never system processes (image under the Windows folder, shell processes,
   PowerMode itself); plus names typed into `Add process…` (no `.exe`, no path; `.exe` is dropped).
   Order: rows with a non-Keep choice first, then alphabetical; the order stays while the page is open.
@@ -310,16 +310,14 @@ values, kill/efficiency/service lists, docker container exclusions, flyout ancho
   every lever logs start/result/duration, every external call has a timeout and never throws out of
   `ApplyAsync` (returns `LeverResult { Ok | Failed(reason) | Skipped(reason) }`).
 
-## 8. Rules for whoever implements this on this machine
+## 8. Development rules
 
-- **Do not change this PC's state while developing.** Allowed: read-only probes (DDC read, NVML read,
-  `powercfg /q`, `/getactivescheme`, `docker ps`, `docker desktop status`, process/service listing,
-  `EnumDisplaySettings`), creating the two PowerMode schemes with `/duplicatescheme` and setting values
-  **on those two schemes only**, and `--render-states`. **Not allowed**: `powercfg /setactive`, any
-  write to the active/other schemes, brightness/contrast writes, `ChangeDisplaySettingsEx`, NVML set,
-  `docker stop/start/desktop stop`, killing or relaunching processes, EcoQoS on real processes, service
-  start/stop, creating the scheduled task. The owner is working at this PC right now; the real switch
-  test happens after review, announced.
-- Commits: English, imperative, small; branch `master`; end each message with
-  `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. No remote yet.
+- **Do not change the development PC's state while developing.** Allowed: read-only probes (DDC read, NVML
+  read, `powercfg /q`, `/getactivescheme`, `docker ps`, `docker desktop status`, process/service listing,
+  `EnumDisplaySettings`), `--status`, `--dry-run` and `--render-states`. Real switches (scheme activation,
+  brightness, display modes, GPU limit, Docker, apps, services, the scheduled task) are tested deliberately,
+  announced, on a PC whose user agreed.
+- Commits: English, imperative, small; branch `master`.
 - Build with the exact tree you commit; `build.ps1` must pass (restore, build, tests, publish).
+- Run the self-contained `publish\PowerMode.exe` for checks, never the framework-dependent `bin\` build.
+- A running PowerMode you did not start belongs to the user: do not send it `--quit`, `--open` or `--mode`.

@@ -61,7 +61,7 @@ public static class AppSettings
     [
         "steam", "discord", "spotify", "Telegram", "Slack", "Viber", "ms-teams", "ChatGPT", "OneDrive", "Postman Agent",
         "EPSDNMON", "EpicGamesLauncher", "Battle.net", "chrome", "msedge", "msedgewebview2", "PhoneExperienceHost",
-        "CrossDeviceService", "Claude", "Code", "idea64", "rider64", "webstorm64", "Zoom",
+        "CrossDeviceService", "Code", "idea64", "rider64", "webstorm64", "Zoom",
     ];
 
     /// <summary>Shell and system processes that own windows but are never an app to close (besides anything under the Windows folder).</summary>
