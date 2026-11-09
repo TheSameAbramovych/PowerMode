@@ -391,3 +391,44 @@ public sealed class PowerReferenceAndCalibrationTests
         Assert.Equal(("108", "148"), (card.MinLabel, card.MaxLabel));
     }
 }
+
+public sealed class PowerApportionTests
+{
+    [Theory]
+    [InlineData(18.4, 12.0, 19.5, 49.4, 99.3)]
+    [InlineData(17.6, 9.4, 12.6, 49.5, 89.1)]
+    [InlineData(21.5, 20.5, 36.5, 64.5, 143.0)]
+    [InlineData(15.0, 0.0, 12.0, 40.0, 67.0)]
+    public void Parts_add_up_to_the_shown_total(double cpu, double gpu, double monitor, double other, double total)
+    {
+        var estimate = new PowerEstimate(cpu, gpu, monitor, other, total);
+
+        var shown = PowerCards.Apportion(estimate);
+
+        Assert.Equal((int)Math.Round(total), shown.Sum());
+        Assert.Equal((int)Math.Round(gpu), shown[1]);
+        var card = PowerCards.Build(estimate, null, null, [], null, DateTimeOffset.UnixEpoch);
+        Assert.Equal(card.TotalText, $"≈ {card.Parts.Sum(p => p.Shown)}");
+    }
+
+    [Fact]
+    public void Without_a_gpu_reading_the_estimated_parts_take_it_all()
+    {
+        var shown = PowerCards.Apportion(new PowerEstimate(18.4, null, 19.5, 49.4, 87.3));
+
+        Assert.Equal(87, shown.Sum());
+        Assert.Equal(0, shown[1]);
+    }
+
+    [Fact]
+    public void The_legend_has_an_approx_slot_and_an_amount()
+    {
+        var card = PowerCards.Build(new PowerEstimate(18.4, 12, 19.5, 49.4, 99.3), null, null, [], null, DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(["≈", string.Empty, "≈", "≈"], card.Parts.Select(p => p.ApproxMark));
+        Assert.Equal(["18 W", "12 W", "20 W", "49 W"], card.Parts.Select(p => p.AmountText));
+        Assert.Equal(99, card.Parts.Sum(p => p.Shown));
+        Assert.Equal("–", new PowerPart("GPU", null, true).AmountText);
+        Assert.Equal(string.Empty, new PowerPart("CPU", null, false).ApproxMark);
+    }
+}

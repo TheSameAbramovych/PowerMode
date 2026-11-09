@@ -2,18 +2,27 @@ using System.Globalization;
 
 namespace PowerMode.Core.Power;
 
-/// <summary>One part of the total: CPU, GPU, Monitor or Other. <see cref="Measured"/> parts are shown without "≈".</summary>
-public sealed record PowerPart(string Name, double? Watts, bool Measured)
+/// <summary>
+/// One part of the total: CPU, GPU, Monitor or Other. <see cref="Measured"/> parts are shown without "≈".
+/// <see cref="Shown"/> is the whole number shown: the parts are rounded so that they add up to the shown total.
+/// </summary>
+public sealed record PowerPart(string Name, double? Watts, bool Measured, int? Shown = null)
 {
     /// <summary><c>CPU ≈ 24 W</c>, <c>GPU 21 W</c>, <c>GPU –</c> when unknown.</summary>
-    public string Text => Watts is { } w
-        ? string.Create(CultureInfo.InvariantCulture, $"{Name} {(Measured ? string.Empty : PowerCards.Approx + " ")}{w:0} W")
-        : $"{Name} {PowerCards.Unknown}";
+    public string Text => Amount is { } amount ? $"{Name} {(Measured ? string.Empty : PowerCards.Approx + " ")}{amount}" : $"{Name} {PowerCards.Unknown}";
 
     /// <summary>The value alone, for the legend under the bar: <c>≈ 24 W</c>, <c>21 W</c>, <c>–</c>.</summary>
-    public string ValueText => Watts is { } w
-        ? string.Create(CultureInfo.InvariantCulture, $"{(Measured ? string.Empty : PowerCards.Approx + " ")}{w:0} W")
-        : PowerCards.Unknown;
+    public string ValueText => Amount is { } amount ? $"{ApproxMark}{(Measured ? string.Empty : " ")}{amount}" : PowerCards.Unknown;
+
+    /// <summary>The legend's fixed-width "≈" slot (empty for a measured part), so the numbers line up.</summary>
+    public string ApproxMark => Measured || Watts is null ? string.Empty : PowerCards.Approx;
+
+    /// <summary><c>24 W</c>; <c>–</c> when unknown.</summary>
+    public string AmountText => Amount ?? PowerCards.Unknown;
+
+    private string? Amount => (Shown ?? (Watts is { } w ? (int?)(int)Math.Round(w) : null)) is { } value
+        ? string.Create(CultureInfo.InvariantCulture, $"{value} W")
+        : null;
 
     /// <summary>Share of the bar: never negative.</summary>
     public double BarWatts => Math.Max(Watts ?? 0, 0);
@@ -82,12 +91,13 @@ public static class PowerCards
             { } d => string.Create(CultureInfo.InvariantCulture, $"▲ {d:0} W vs Grid"),
         };
         var note = calibration is { } c ? $"Calibrated {When(c.CalibratedAt, now)}" : "Estimate";
+        var shown = estimate is null ? null : Apportion(estimate);
         PowerPart[] parts =
         [
-            new(Cpu, estimate?.CpuW, false),
-            new(Gpu, estimate?.GpuW, true),
-            new(Monitor, estimate?.MonitorW, false),
-            new(Other, estimate?.OtherW, false),
+            new(Cpu, estimate?.CpuW, false, shown?[0]),
+            new(Gpu, estimate?.GpuW, true, shown?[1]),
+            new(Monitor, estimate?.MonitorW, false, shown?[2]),
+            new(Other, estimate?.OtherW, false, shown?[3]),
         ];
         var marker = switchedAt is { } s && history.Count > 0 && s >= history[0].At ? s : (DateTimeOffset?)null;
         return new PowerCard(
@@ -103,6 +113,35 @@ public static class PowerCards
             marker,
             history.Count > 0 ? Watts(PowerHistory.PlotRange(history).Min) : null,
             history.Count > 0 ? Watts(PowerHistory.PlotRange(history).Max) : null);
+    }
+
+    /// <summary>
+    /// Whole watts for CPU, GPU, Monitor and Other that add up to the shown total: the measured GPU keeps its own
+    /// rounding, the estimated parts share the rest by the largest remainder.
+    /// </summary>
+    public static int[] Apportion(PowerEstimate estimate)
+    {
+        ArgumentNullException.ThrowIfNull(estimate);
+        var total = (int)Math.Round(estimate.TotalW);
+        var gpu = estimate.GpuW is { } measured ? (int)Math.Round(measured) : 0;
+        double[] estimated = [estimate.CpuW, estimate.MonitorW, estimate.OtherW];
+        var floors = estimated.Select(v => (int)Math.Floor(v)).ToArray();
+        var left = total - gpu - floors.Sum();
+        foreach (var index in Enumerable.Range(0, estimated.Length).OrderByDescending(i => estimated[i] - floors[i]).ThenBy(i => i))
+        {
+            if (left == 0)
+            {
+                break;
+            }
+
+            var step = Math.Sign(left);
+            floors[index] += step;
+            left -= step;
+        }
+
+        // More than one watt per part to move (a rounding never needs that): Other takes the rest.
+        floors[2] += left;
+        return [floors[0], gpu, floors[1], floors[2]];
     }
 
     /// <summary>Time of day today, otherwise with the date.</summary>
