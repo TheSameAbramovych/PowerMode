@@ -50,11 +50,16 @@ How it works:
 
 ## Using it
 
-- **Tray icon**: plug (Grid), amber battery (Station), red low battery (Reserve); a small dot circles while a
-  switch runs. The tooltip shows mode and GPU watts. Left click opens the flyout; right click has the mode
-  menu, Open, Start with Windows, Open config, Switch to Grid and quit, Quit (keep mode).
+- **Tray icon**: always in colour, so you can see that PowerMode runs and in which mode: blue plug (Grid),
+  amber battery with a dot (Station), red low battery with a dot (Reserve); a small dot circles while a switch
+  runs. The tooltip shows mode and GPU watts, also while a switch runs. Left click opens or closes the flyout;
+  right click has the mode menu, Open, Start with Windows, Open config, Switch to Grid and quit, Quit (keep
+  mode). Windows 11 puts new tray icons into the hidden overflow; on its **first start from a folder**
+  PowerMode moves its own icon onto the taskbar, once (you can hide it again and it stays hidden). Where
+  Windows has no such setting, a one-time balloon says to drag the icon onto the taskbar.
 - **Flyout**: mode selector (keys `1` `2` `3`), status line, one row per lever with what the mode set, the live
-  value and ✓ / ⟳ / ⚠. `Esc` closes it.
+  value and ✓ / ⟳ / ⚠. The pin in the header keeps it open when you click elsewhere (on by default,
+  remembered); it then closes with ×, `Esc` or the tray icon. Unpinned, it hides as soon as it loses focus.
 - **Apps settings** (gear in the flyout header): one row per app with a choice for **Station** and
   **Reserve**: `Keep`, `Efficiency` (efficiency mode, the mode's `efficiencyApps`) or `Close` (its
   `closeApps`); plus `Wallpaper Engine`: `Keep` / `Pause`. The list holds every app in those lists, the apps
@@ -64,7 +69,8 @@ How it works:
   it is for the mode you are in, it also applies at once (an app set to `Close` closes now and Grid starts
   it again; `Keep` starts again what PowerMode closed and clears efficiency mode). `Open config.json` at
   the bottom covers the rest (services, levers, hotkeys). Saving rewrites `config.json` in the app's own
-  format: other keys stay as they are, comments do not survive. `Esc` goes back to the lever table.
+  format: other keys stay as they are, comments do not survive. Each saved change shows `Saved 10:31` next
+  to the title. `Esc` (or the back arrow) goes back to the lever table, which already shows the new lists.
 - **Hotkeys**: `Ctrl+Alt+1` Grid, `Ctrl+Alt+2` Station, `Ctrl+Alt+3` Reserve (configurable).
 
 ### Command line
