@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using PowerMode.Core.Levers;
 using PowerMode.Core.Logging;
 
 namespace PowerMode.App.Infrastructure;
@@ -15,25 +16,25 @@ internal sealed class UserLauncher
     private const string OpenVerb = "open";
     private const int ShowNormal = 1;
     private const int ShowHidden = 0;
+    private const int ShellAttempts = 3;
+    private static readonly TimeSpan ShellRetryDelay = TimeSpan.FromSeconds(1);
 
     private readonly ILog _log;
 
     public UserLauncher(ILog log) => _log = log;
 
-    public void Launch(string path, string arguments, bool hidden)
+    /// <summary>
+    /// Start <paramref name="path"/> (an exe, or a shell URI such as <c>shell:AppsFolder\&lt;AUMID&gt;</c>) as the normal
+    /// user, in <paramref name="workingDirectory"/> (default: the exe's folder). Throws <see cref="LeverException"/> when
+    /// PowerMode is elevated and the desktop shell cannot start it: it never falls back to an elevated start.
+    /// </summary>
+    public void Launch(string path, string arguments, bool hidden, string? workingDirectory = null)
     {
-        var directory = Path.GetDirectoryName(path) ?? Environment.CurrentDirectory;
+        var directory = workingDirectory ?? Path.GetDirectoryName(path) ?? Environment.CurrentDirectory;
         if (Elevation.IsElevated)
         {
-            try
-            {
-                ShellExecuteAsDesktopUser(path, arguments, directory, hidden ? ShowHidden : ShowNormal);
-                return;
-            }
-            catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException)
-            {
-                _log.Error(Category, $"Desktop shell launch failed, starting {Path.GetFileName(path)} directly", ex);
-            }
+            LaunchThroughShell(path, arguments, directory, hidden);
+            return;
         }
 
         var info = new ProcessStartInfo(path, arguments)
@@ -45,32 +46,79 @@ internal sealed class UserLauncher
         using var process = Process.Start(info);
     }
 
+    /// <summary>Explorer may be restarting (right after a display mode change) or not registered yet at logon: retry briefly.</summary>
+    private void LaunchThroughShell(string path, string arguments, string directory, bool hidden)
+    {
+        var name = Path.GetFileName(path);
+        Exception? last = null;
+        for (var attempt = 1; attempt <= ShellAttempts; attempt++)
+        {
+            try
+            {
+                ShellExecuteAsDesktopUser(path, arguments, directory, hidden ? ShowHidden : ShowNormal);
+                return;
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException)
+            {
+                last = ex;
+                _log.Write(Category, $"Desktop shell launch of {name} failed (attempt {attempt} of {ShellAttempts}): {ex.Message}");
+                if (attempt < ShellAttempts)
+                {
+                    Thread.Sleep(ShellRetryDelay);
+                }
+            }
+        }
+
+        // Process.Start from here would inherit the elevated token: fail loudly instead.
+        _log.Error(Category, $"Cannot start {name} as the normal user", last!);
+        throw new LeverException($"Could not start {name} as the normal user: the desktop shell (Explorer) is unavailable");
+    }
+
     private static void ShellExecuteAsDesktopUser(string path, string arguments, string directory, int show)
     {
         var shellWindowsType = Type.GetTypeFromCLSID(ShellGuids.ShellWindows, throwOnError: true)!;
         dynamic shellWindows = Activator.CreateInstance(shellWindowsType)!;
+        object? desktop = null;
+        IShellBrowser? browser = null;
+        IShellView? view = null;
         try
         {
             object location = ShellGuids.CsidlDesktop;
             object root = Missing;
             int windowHandle;
-            var desktop = (object)shellWindows.FindWindowSW(ref location, ref root, ShellGuids.SwcDesktop, out windowHandle, ShellGuids.SwfoNeedDispatch);
+            desktop = (object?)shellWindows.FindWindowSW(ref location, ref root, ShellGuids.SwcDesktop, out windowHandle, ShellGuids.SwfoNeedDispatch)
+                ?? throw new InvalidOperationException("No desktop shell window is registered");
             var provider = (IServiceProvider)desktop;
             var browserGuid = ShellGuids.TopLevelBrowser;
             var browserIid = typeof(IShellBrowser).GUID;
-            var browser = (IShellBrowser)provider.QueryService(ref browserGuid, ref browserIid);
-            var view = browser.QueryActiveShellView();
+            browser = (IShellBrowser?)provider.QueryService(ref browserGuid, ref browserIid)
+                ?? throw new InvalidOperationException("The desktop has no shell browser");
+            view = browser.QueryActiveShellView() ?? throw new InvalidOperationException("The desktop has no active shell view");
             var dispatchIid = ShellGuids.Dispatch;
-            dynamic folderView = view.GetItemObject(ShellGuids.SvgioBackground, ref dispatchIid);
-            dynamic shell = folderView.Application;
+            dynamic? folderView = view.GetItemObject(ShellGuids.SvgioBackground, ref dispatchIid);
+            dynamic? shell = (folderView ?? throw new InvalidOperationException("The desktop view has no folder view")).Application;
+            if (shell is null)
+            {
+                throw new InvalidOperationException("The desktop folder view has no shell application");
+            }
+
             shell.ShellExecute(path, arguments, directory, OpenVerb, show);
-            Marshal.FinalReleaseComObject(view);
-            Marshal.FinalReleaseComObject(browser);
-            Marshal.FinalReleaseComObject(desktop);
         }
         finally
         {
+            // Released on every path, so a failure halfway down the chain leaks nothing.
+            Release(view);
+            Release(browser);
+            Release(desktop);
             Marshal.FinalReleaseComObject(shellWindows);
+        }
+    }
+
+    private static void Release(object? comObject)
+    {
+        if (comObject is not null && Marshal.IsComObject(comObject))
+        {
+            Marshal.FinalReleaseComObject(comObject);
         }
     }
 
