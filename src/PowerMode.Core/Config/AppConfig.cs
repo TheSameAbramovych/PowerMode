@@ -102,6 +102,12 @@ public sealed class AppConfig
     /// <summary>Re-apply brightness/refresh when Windows changes display settings (at most once a minute).</summary>
     public bool ReapplyOnDisplayChange { get; set; } = true;
 
+    /// <summary>
+    /// The scheme Grid activates when it does not know which one was active before (the read failed, or the state was
+    /// lost while a PowerMode scheme was active). Must not be one of the two PowerMode schemes.
+    /// </summary>
+    public Guid FallbackScheme { get; set; } = PowerSchemes.Balanced;
+
     /// <summary>Union of every close list (what the snapshot records).</summary>
     public IReadOnlyList<string> AllCloseApps() => Union(Modes.Station.CloseApps, Modes.Reserve.CloseApps);
 

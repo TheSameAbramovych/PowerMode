@@ -11,20 +11,36 @@ internal sealed class DdcBrightnessLever : ILever
     private const string What = "DDC/CI";
     private const string NoMonitor = "No monitor answered over DDC/CI (asleep or DDC/CI off)";
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1);
 
     public LeverKind Kind => LeverKind.Brightness;
 
     /// <summary>A mode change makes the monitor resync; set brightness after it.</summary>
     public LeverKind? RunsAfter => LeverKind.DisplayMode;
 
+    /// <summary>
+    /// Record brightness and contrast. No monitor at all is a legitimately empty baseline; monitors that are there but
+    /// do not answer (DDC/CI reads fail for a moment) are retried once and otherwise make the capture inconclusive.
+    /// </summary>
     public async Task CaptureAsync(Snapshot snapshot, AppConfig config, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        snapshot.Monitors = await NativeCall.RunAsync(ReadAll, Timeout, What, cancellationToken).ConfigureAwait(false);
+        var (levels, enumerated) = await NativeCall.RunAsync(ReadAll, Timeout, What, cancellationToken).ConfigureAwait(false);
+        if (levels.Count == 0 && enumerated > 0)
+        {
+            await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
+            (levels, enumerated) = await NativeCall.RunAsync(ReadAll, Timeout, What, cancellationToken).ConfigureAwait(false);
+            if (levels.Count == 0 && enumerated > 0)
+            {
+                throw new LeverException(NoMonitor);
+            }
+        }
+
+        snapshot.Monitors = levels;
     }
 
-    /// <summary>Current brightness (0..100 % of each monitor's range) of every DDC monitor.</summary>
-    public static List<MonitorLevel> ReadAll()
+    /// <summary>Current brightness and contrast of every monitor that answers over DDC/CI, and how many monitors there are.</summary>
+    private static (List<MonitorLevel> Levels, int Enumerated) ReadAll()
     {
         using var monitors = DdcMonitors.Open();
         var levels = new List<MonitorLevel>();
@@ -36,7 +52,7 @@ internal sealed class DdcBrightnessLever : ILever
             }
         }
 
-        return levels;
+        return (levels, monitors.Monitors.Count);
     }
 
     public async Task<LeverPlan> PlanAsync(ApplyContext context, CancellationToken cancellationToken)

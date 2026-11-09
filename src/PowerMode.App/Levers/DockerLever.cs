@@ -17,9 +17,11 @@ internal sealed class DockerLever : ILever
     private const string ExecutableName = "docker.exe";
     private const string KnownLocation = @"C:\Program Files\Docker\Docker\resources\bin\docker.exe";
     private const string NotInstalled = "Docker is not installed";
+    private const string StatusUnavailable = "Docker Desktop status unavailable (docker desktop status and docker ps failed, or the engine is still starting)";
     private static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(120);
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan CaptureStartingWait = TimeSpan.FromSeconds(30);
     private static readonly string[] StatusArguments = ["desktop", "status", "--format", "json"];
     private static readonly string[] NamesArguments = ["ps", "--format", "{{.Names}}"];
 
@@ -42,14 +44,15 @@ internal sealed class DockerLever : ILever
         ArgumentNullException.ThrowIfNull(snapshot);
         if (_docker.Value is null)
         {
+            // Not installed: legitimately no Docker part.
             return;
         }
 
-        var running = await StatusAsync(cancellationToken).ConfigureAwait(false) == DockerEngineStatus.Running;
-        snapshot.Docker = new DockerSnapshot(running, running ? await RunningContainersAsync(cancellationToken).ConfigureAwait(false) : []);
+        snapshot.Docker = await ReadAsync(waitWhileStarting: true, cancellationToken).ConfigureAwait(false)
+            ?? throw new LeverException(StatusUnavailable);
     }
 
-    /// <summary>Engine state and running container count for the live column; null when Docker is missing.</summary>
+    /// <summary>Engine state and running container count for the live column; null when Docker is missing or cannot be read.</summary>
     public async Task<(bool Running, int Containers)?> ReadLiveAsync(CancellationToken cancellationToken)
     {
         if (_docker.Value is null)
@@ -57,8 +60,36 @@ internal sealed class DockerLever : ILever
             return null;
         }
 
-        var running = await StatusAsync(cancellationToken).ConfigureAwait(false) == DockerEngineStatus.Running;
-        return (running, running ? (await RunningContainersAsync(cancellationToken).ConfigureAwait(false)).Count : 0);
+        return await ReadAsync(waitWhileStarting: false, cancellationToken).ConfigureAwait(false) is { } docker
+            ? (docker.EngineRunning, docker.RunningContainers.Count)
+            : null;
+    }
+
+    /// <summary>
+    /// The engine and its running containers, or null when that cannot be told: the status call failed and
+    /// <c>docker ps</c> does not answer either, the engine is still starting, or it runs but its containers cannot be listed.
+    /// </summary>
+    private async Task<DockerSnapshot?> ReadAsync(bool waitWhileStarting, CancellationToken cancellationToken)
+    {
+        var status = await StatusAsync(cancellationToken).ConfigureAwait(false);
+        if (waitWhileStarting && status == DockerEngineStatus.Starting)
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(Math.Min(_config().Docker.EngineWaitSeconds, CaptureStartingWait.TotalSeconds));
+            while (status == DockerEngineStatus.Starting && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(PollInterval, cancellationToken).ConfigureAwait(false);
+                status = await StatusAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return status switch
+        {
+            DockerEngineStatus.Stopped => new DockerSnapshot(false, []),
+            DockerEngineStatus.Starting => null,
+
+            // Running, or Unknown (status failed or timed out): docker ps answers only while the engine runs.
+            _ => await RunningContainersAsync(cancellationToken).ConfigureAwait(false) is { } names ? new DockerSnapshot(true, names) : null,
+        };
     }
 
     public async Task<LeverPlan> PlanAsync(ApplyContext context, CancellationToken cancellationToken)
@@ -71,7 +102,7 @@ internal sealed class DockerLever : ILever
 
         if (_docker.Value is null)
         {
-            return LeverPlan.Fail(NotInstalled);
+            return LeverPlan.Fail(NotInstalled, permanent: true);
         }
 
         var status = await StatusAsync(cancellationToken).ConfigureAwait(false);
@@ -79,7 +110,9 @@ internal sealed class DockerLever : ILever
         var actions = new List<LeverAction>();
         if (!target.Running)
         {
-            if (engineUp)
+            // Unknown means the status call failed (a busy or hung backend), not that the engine is down. Stopping is
+            // safe to repeat and fails visibly when the backend really hangs.
+            if (status != DockerEngineStatus.Stopped)
             {
                 actions.Add(new LeverAction("Stop Docker Desktop", ct => RunCheckedAsync(CommandTimeout, ["desktop", "stop"], ct)));
             }
@@ -93,7 +126,7 @@ internal sealed class DockerLever : ILever
         }
 
         var missing = status == DockerEngineStatus.Running
-            ? target.ContainersToStart.Except(await RunningContainersAsync(cancellationToken).ConfigureAwait(false), StringComparer.Ordinal).ToList()
+            ? target.ContainersToStart.Except(await RunningContainersAsync(cancellationToken).ConfigureAwait(false) ?? [], StringComparer.Ordinal).ToList()
             : [.. target.ContainersToStart];
         if (missing.Count > 0)
         {
@@ -132,7 +165,7 @@ internal sealed class DockerLever : ILever
 
     private async Task StartContainersAsync(IReadOnlyList<string> wanted, CancellationToken cancellationToken)
     {
-        var running = await RunningContainersAsync(cancellationToken).ConfigureAwait(false);
+        var running = await RunningContainersAsync(cancellationToken).ConfigureAwait(false) ?? [];
         var missing = wanted.Except(running, StringComparer.Ordinal).ToList();
         if (missing.Count > 0)
         {
@@ -146,10 +179,11 @@ internal sealed class DockerLever : ILever
         return result.Succeeded ? DockerParser.ParseDesktopStatus(result.StandardOutput) : DockerEngineStatus.Unknown;
     }
 
-    private async Task<IReadOnlyList<string>> RunningContainersAsync(CancellationToken cancellationToken)
+    /// <summary>Names of the running containers, or null when <c>docker ps</c> fails (never an empty list for "unknown").</summary>
+    private async Task<IReadOnlyList<string>?> RunningContainersAsync(CancellationToken cancellationToken)
     {
         var result = await _runner.RunAsync(_docker.Value!, NamesArguments, QueryTimeout, cancellationToken).ConfigureAwait(false);
-        return result.Succeeded ? DockerParser.ParseNames(result.StandardOutput) : [];
+        return result.Succeeded ? DockerParser.ParseNames(result.StandardOutput) : null;
     }
 
     private async Task RunCheckedAsync(TimeSpan timeout, string[] arguments, CancellationToken cancellationToken)

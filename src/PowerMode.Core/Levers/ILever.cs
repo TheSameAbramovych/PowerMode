@@ -8,7 +8,7 @@ namespace PowerMode.Core.Levers;
 public sealed record LeverAction(string Description, Func<CancellationToken, Task> Execute, bool RequiresElevation = false);
 
 /// <summary>What a lever would do to reach the target from the current state.</summary>
-public sealed record LeverPlan(IReadOnlyList<LeverAction> Actions, string? Unavailable = null, bool NotOwned = false)
+public sealed record LeverPlan(IReadOnlyList<LeverAction> Actions, string? Unavailable = null, bool NotOwned = false, bool Permanent = false)
 {
     /// <summary>The mode does not own this lever.</summary>
     public static LeverPlan None { get; } = new([], NotOwned: true);
@@ -19,7 +19,7 @@ public sealed record LeverPlan(IReadOnlyList<LeverAction> Actions, string? Unava
     public static LeverPlan Of(IEnumerable<LeverAction> actions) => new([.. actions]);
 
     /// <summary>The lever cannot work on this machine (no NVML, Docker not installed, ...).</summary>
-    public static LeverPlan Fail(string reason) => new([], reason);
+    public static LeverPlan Fail(string reason, bool permanent = false) => new([], reason, Permanent: permanent);
 }
 
 public sealed record ApplyContext(TargetState Target, PersistedState State, bool IsElevated);
@@ -36,7 +36,10 @@ public interface ILever
     /// <summary>Another lever that must finish before this one starts (e.g. brightness after the display mode).</summary>
     LeverKind? RunsAfter => null;
 
-    /// <summary>Record this lever's part of the baseline (read-only).</summary>
+    /// <summary>
+    /// Record this lever's part of the baseline (read-only). Throw when the read failed or was inconclusive: the part
+    /// is then marked missing and the lever is not reduced, rather than recording a wrong baseline.
+    /// </summary>
     Task CaptureAsync(Snapshot snapshot, AppConfig config, CancellationToken cancellationToken);
 
     /// <summary>Compute the diff from the current state to the target (read-only).</summary>

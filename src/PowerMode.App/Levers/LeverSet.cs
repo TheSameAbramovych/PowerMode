@@ -15,9 +15,10 @@ internal sealed class LeverSet : IDisposable
         var launcher = new UserLauncher(log);
         Nvml = new NvmlProvider();
         Docker = new DockerLever(Runner, launcher, config);
+        Powercfg = new PowercfgLever(Runner);
         Levers =
         [
-            new PowercfgLever(Runner),
+            Powercfg,
             new DisplayModeLever(),
             new DdcBrightnessLever(),
             new NvmlGpuLever(Nvml),
@@ -34,6 +35,8 @@ internal sealed class LeverSet : IDisposable
     public NvmlProvider Nvml { get; }
 
     public DockerLever Docker { get; }
+
+    public PowercfgLever Powercfg { get; }
 
     public IReadOnlyList<ILever> Levers { get; }
 

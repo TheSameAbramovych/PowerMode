@@ -1,4 +1,5 @@
 using PowerMode.Core.Config;
+using PowerMode.Core.Levers;
 using PowerMode.Core.Model;
 using PowerMode.Core.Planning;
 using PowerMode.Core.Presentation;
@@ -106,27 +107,82 @@ public sealed class TargetPlannerTests
     }
 
     [Fact]
-    public void Grid_never_restores_one_of_its_own_schemes()
+    public void Grid_never_restores_one_of_its_own_schemes_and_activates_the_fallback_instead()
     {
         var snapshot = RenderFixtures.Baseline();
         snapshot.ActiveScheme = PowerSchemes.Station;
 
-        Assert.Null(TargetPlanner.Plan(PowerModeKind.Grid, Config, snapshot).Scheme);
+        var scheme = TargetPlanner.Plan(PowerModeKind.Grid, Config, snapshot).Scheme!;
+
+        Assert.Equal(Config.FallbackScheme, scheme.Scheme);
+        Assert.True(scheme.IsFallback);
+        Assert.Null(scheme.Configure);
     }
 
     [Fact]
-    public void Grid_with_partial_snapshot_leaves_missing_parts()
+    public void Grid_with_partial_snapshot_leaves_empty_parts_and_falls_back_for_the_scheme()
     {
+        var config = AppConfig.CreateDefault();
+        config.FallbackScheme = PowerSchemes.PowerSaver;
         var snapshot = new Snapshot { Docker = new DockerSnapshot(false, []) };
 
-        var target = TargetPlanner.Plan(PowerModeKind.Grid, Config, snapshot);
+        var target = TargetPlanner.Plan(PowerModeKind.Grid, config, snapshot);
 
-        Assert.Null(target.Scheme);
+        Assert.Equal(PowerSchemes.PowerSaver, target.Scheme!.Scheme);
+        Assert.True(target.Scheme.IsFallback);
         Assert.Null(target.Monitor);
         Assert.Null(target.Refresh);
         Assert.Null(target.Gpu);
         Assert.Null(target.Docker);
         Assert.Equal(WallpaperAction.Leave, target.Wallpaper);
+    }
+
+    [Fact]
+    public void Grid_leaves_missing_parts_alone_and_uses_the_fallback_for_a_missing_scheme()
+    {
+        var snapshot = RenderFixtures.Baseline();
+        snapshot.Missing = [.. Enum.GetValues<LeverKind>()];
+
+        var target = TargetPlanner.Plan(PowerModeKind.Grid, Config, snapshot);
+
+        Assert.Equal(Config.FallbackScheme, target.Scheme!.Scheme);
+        Assert.True(target.Scheme.IsFallback);
+        foreach (var kind in Enum.GetValues<LeverKind>().Where(k => k != LeverKind.PowerScheme))
+        {
+            Assert.False(target.Sets(kind), $"{kind} should be left alone");
+        }
+    }
+
+    [Fact]
+    public void Grid_no_longer_owes_restored_parts()
+    {
+        var snapshot = RenderFixtures.Baseline();
+        snapshot.Restored = [.. Enum.GetValues<LeverKind>().Where(k => k != LeverKind.Brightness)];
+
+        var target = TargetPlanner.Plan(PowerModeKind.Grid, Config, snapshot);
+
+        Assert.Equal(80, target.Monitor!.Restore.Single().Brightness);
+        Assert.Null(target.Scheme);
+        Assert.Null(target.Docker);
+        Assert.Empty(target.Apps.Relaunch);
+        Assert.Empty(target.Services.Start);
+        Assert.Equal(WallpaperAction.Leave, target.Wallpaper);
+    }
+
+    [Fact]
+    public void Target_sets_reports_which_levers_have_work()
+    {
+        var station = TargetPlanner.Plan(PowerModeKind.Station, Config, Baseline);
+        var grid = TargetPlanner.Plan(PowerModeKind.Grid, Config, null);
+
+        Assert.All(Enum.GetValues<LeverKind>().Where(k => k != LeverKind.Efficiency), k => Assert.True(station.Sets(k), k.ToString()));
+        Assert.False(station.Sets(LeverKind.Efficiency));
+        Assert.True(TargetPlanner.Plan(PowerModeKind.Reserve, Config, Baseline).Sets(LeverKind.Efficiency));
+        Assert.All(Enum.GetValues<LeverKind>(), k => Assert.False(grid.Sets(k), k.ToString()));
+        var restore = TargetPlanner.Plan(PowerModeKind.Grid, Config, Baseline);
+        Assert.True(restore.Sets(LeverKind.Apps));
+        Assert.True(restore.Sets(LeverKind.Services));
+        Assert.Throws<ArgumentOutOfRangeException>(() => grid.Sets((LeverKind)99));
     }
 
     [Fact]

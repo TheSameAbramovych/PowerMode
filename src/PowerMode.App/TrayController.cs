@@ -77,15 +77,22 @@ internal sealed class TrayController : IDisposable
         _liveTimer.Start();
         _services.Log.Write(Category, $"Started ({(Elevation.IsElevated ? "elevated" : "not elevated")}), mode {ModeNames.Display(_services.Switcher.State.Mode)}");
 
-        if (_services.Switcher.NeedsReapplyOnStart)
-        {
-            // The power scheme survives a reboot, the GPU limit and closed apps do not: re-apply.
-            _ = SwitchAsync(_services.Switcher.State.Mode);
-        }
+        _ = ReapplyOnStartAsync();
 
         if (openFlyout)
         {
             OpenFlyout();
+        }
+    }
+
+    /// <summary>The power scheme survives a reboot, the GPU limit and closed apps do not: re-apply (after recovering a lost state).</summary>
+    private async Task ReapplyOnStartAsync()
+    {
+        await _services.RecoverLostModeAsync();
+        Refresh();
+        if (_services.Switcher.NeedsReapplyOnStart)
+        {
+            await SwitchAsync(_services.Switcher.State.Mode);
         }
     }
 
@@ -259,15 +266,11 @@ internal sealed class TrayController : IDisposable
         });
     }
 
+    /// <summary>Saved at once; Docker is re-applied in Station, after a running switch if there is one (it planned with the old option).</summary>
     private async Task SetKeepDockerAsync(bool keep)
     {
-        _services.Switcher.SetKeepDocker(PowerModeKind.Station, keep);
+        await Task.Run(() => _services.Switcher.SetKeepDockerAsync(PowerModeKind.Station, keep));
         Refresh();
-        if (_services.Switcher.State.Mode == PowerModeKind.Station && !_switching)
-        {
-            await Task.Run(() => _services.Switcher.ReapplyAsync([LeverKind.Docker]));
-            Refresh();
-        }
     }
 
     private async Task SetAutostartAsync(bool on)
@@ -366,6 +369,12 @@ internal sealed class TrayController : IDisposable
         _app.Dispatcher.BeginInvoke(async () =>
         {
             await Task.Delay(ResumeDelay);
+            if (!_services.Switcher.NeedsReapplyOnStart)
+            {
+                // Grid with nothing left to restore: re-applying would only fight the owner's own changes.
+                return;
+            }
+
             _services.Log.Write(Category, "Resumed; re-applying");
             await SwitchAsync(_services.Switcher.State.Mode);
         });

@@ -188,7 +188,8 @@ public sealed class ModeSwitcherTests
         var monitor = new BrightnessMachine();
         var gpu = new GpuMachine();
         var gpuLever = gpu.Lever();
-        using var harness = new SwitcherHarness([monitor.Lever(), gpuLever]);
+        var monitorLever = monitor.Lever();
+        using var harness = new SwitcherHarness([monitorLever, gpuLever]);
         await harness.Switcher.SwitchAsync(PowerModeKind.Station);
         gpuLever.Planned.Clear();
 
@@ -199,6 +200,7 @@ public sealed class ModeSwitcherTests
         Assert.Single(outcome.Results);
         Assert.Equal(35, monitor.Value);
         Assert.Empty(gpuLever.Planned);
+        Assert.Equal(1, monitorLever.Captures);
         Assert.False(await harness.Switcher.HasDriftedAsync([LeverKind.Brightness]));
     }
 
@@ -206,7 +208,8 @@ public sealed class ModeSwitcherTests
     public async Task Full_reapply_without_levers_reapplies_the_current_mode()
     {
         var monitor = new BrightnessMachine();
-        using var harness = new SwitcherHarness([monitor.Lever()]);
+        var lever = monitor.Lever();
+        using var harness = new SwitcherHarness([lever]);
         await harness.Switcher.SwitchAsync(PowerModeKind.Reserve);
         monitor.Value = 99;
 
@@ -214,6 +217,7 @@ public sealed class ModeSwitcherTests
 
         Assert.Equal(PowerModeKind.Reserve, outcome.Mode);
         Assert.Equal(10, monitor.Value);
+        Assert.Equal(1, lever.Captures);
     }
 
     [Fact]
@@ -261,7 +265,7 @@ public sealed class ModeSwitcherTests
         };
         using var harness = new SwitcherHarness([docker]);
 
-        harness.Switcher.SetKeepDocker(PowerModeKind.Station, true);
+        await harness.Switcher.SetKeepDockerAsync(PowerModeKind.Station, true);
         await harness.Switcher.SwitchAsync(PowerModeKind.Station);
 
         Assert.True(harness.Reload().OptionsFor(PowerModeKind.Station).KeepDocker);

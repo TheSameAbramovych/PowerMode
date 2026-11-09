@@ -98,9 +98,21 @@ internal sealed class BrightnessMachine
 
     public bool FailWrites { get; set; }
 
+    /// <summary>The next this many captures throw (a DDC read that fails for a moment).</summary>
+    public int FailCaptures { get; set; }
+
     public FakeLever Lever() => new(LeverKind.Brightness)
     {
-        OnCapture = s => s.Monitors = [new MonitorLevel("m#0", Value, 50)],
+        OnCapture = s =>
+        {
+            if (FailCaptures > 0)
+            {
+                FailCaptures--;
+                throw new LeverException("DDC/CI read failed");
+            }
+
+            s.Monitors = [new MonitorLevel("m#0", Value, 50)];
+        },
         OnPlan = context =>
         {
             if (context.Target.Monitor is not { } target)
@@ -149,6 +161,36 @@ internal sealed class GpuMachine
                     LimitMw = wanted;
                     return Task.CompletedTask;
                 }, RequiresElevation: true)]);
+        },
+    };
+}
+
+/// <summary>A power scheme "machine": the active scheme, like powercfg /getactivescheme and /setactive.</summary>
+internal sealed class SchemeMachine
+{
+    public static readonly Guid UserScheme = Guid.Parse("9897998c-92de-4669-853f-b7cd3ecb2790");
+
+    public Guid Active { get; set; } = UserScheme;
+
+    public bool FailCaptures { get; set; }
+
+    public FakeLever Lever() => new(LeverKind.PowerScheme)
+    {
+        OnCapture = s => s.ActiveScheme = FailCaptures ? throw new LeverException("powercfg timed out") : Active,
+        OnPlan = context =>
+        {
+            if (context.Target.Scheme is not { } target)
+            {
+                return LeverPlan.None;
+            }
+
+            return target.Scheme == Active
+                ? LeverPlan.Done
+                : LeverPlan.Of([new LeverAction("activate", _ =>
+                {
+                    Active = target.Scheme;
+                    return Task.CompletedTask;
+                })]);
         },
     };
 }

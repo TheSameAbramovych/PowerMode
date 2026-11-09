@@ -13,11 +13,13 @@ public enum LeverStatus
 }
 
 /// <summary>Outcome of one lever. Levers never throw; they return one of these.</summary>
-public sealed record LeverResult(LeverStatus Status, string Detail, bool NeedsElevation = false, TimeSpan Duration = default)
+/// <param name="Permanent">The failure will not go away by retrying (Docker not installed, the scheme was deleted); Grid stops owing it.</param>
+public sealed record LeverResult(LeverStatus Status, string Detail, bool NeedsElevation = false, TimeSpan Duration = default, bool Permanent = false)
 {
     public const string NeedsAdministrator = "Needs administrator";
     public const string AlreadySet = "Already set";
     public const string NotOwned = "Not used in this mode";
+    public const string BaselineNotCaptured = "Baseline not captured, not reducing";
 
     public static LeverResult Ok(string detail) => new(LeverStatus.Ok, detail);
 

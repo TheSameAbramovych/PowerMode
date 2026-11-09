@@ -1,4 +1,6 @@
+using System.Text.Json;
 using PowerMode.Core.Levers;
+using PowerMode.Core.State;
 
 namespace PowerMode.Core.Model;
 
@@ -12,8 +14,11 @@ public sealed record GpuSnapshot(uint LimitMilliwatts, uint DefaultMilliwatts);
 
 public sealed record DockerSnapshot(bool EngineRunning, IReadOnlyList<string> RunningContainers);
 
-/// <summary>A process that one of the close lists may close; enough to relaunch it.</summary>
-public sealed record CapturedProcess(string Name, string Path, string Arguments);
+/// <summary>
+/// A process that one of the close lists may close; enough to relaunch it. <see cref="AppUserModelId"/> is set for
+/// packaged (MSIX) apps, which are relaunched through their AUMID; <see cref="Path"/> is then for display only.
+/// </summary>
+public sealed record CapturedProcess(string Name, string Path, string Arguments, string? AppUserModelId = null);
 
 /// <summary>
 /// The baseline captured once when leaving Grid. Each lever fills only its own part; Grid restores it lever
@@ -42,8 +47,40 @@ public sealed class Snapshot
     public Dictionary<string, bool> Services { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Copy one lever's part from an older snapshot. Used when a previous Grid restore of that lever failed,
-    /// so the fresh capture would otherwise record the still-reduced value as the new baseline.
+    /// Close-list names this baseline has looked at (running or not), so a name added to a list later is captured
+    /// on its own. Null in snapshots written before it existed: <see cref="CoveredAppNames"/> falls back to the captured names.
+    /// </summary>
+    public List<string>? CoveredApps { get; set; }
+
+    /// <summary>Service-list names this baseline has looked at; see <see cref="CoveredApps"/>.</summary>
+    public List<string>? CoveredServices { get; set; }
+
+    /// <summary>
+    /// Parts whose read failed or was inconclusive. A saving mode does not reduce such a lever (the power scheme
+    /// excepted: Grid then activates the fallback scheme), so Grid leaves it alone. Replaced, never changed in
+    /// place, because the UI thread reads it while a switch runs.
+    /// </summary>
+    public HashSet<LeverKind> Missing { get; set; } = [];
+
+    /// <summary>Parts a Grid restore already put back (or gave up on for good); Grid no longer owes them. Replaced, never changed in place.</summary>
+    public HashSet<LeverKind> Restored { get; set; } = [];
+
+    public IReadOnlyList<string> CoveredAppNames() => CoveredApps ?? [.. Processes.Select(p => p.Name)];
+
+    public IReadOnlyList<string> CoveredServiceNames() => CoveredServices ?? [.. Services.Keys];
+
+    /// <summary>Grid still has to restore this part.</summary>
+    public bool Owes(LeverKind kind) => !Restored.Contains(kind) && !Missing.Contains(kind);
+
+    public void SetMissing(LeverKind kind, bool missing) =>
+        Missing = missing ? [.. Missing, kind] : [.. Missing.Where(k => k != kind)];
+
+    /// <summary>A deep copy (a dry run completes a copy without touching the persisted baseline).</summary>
+    public Snapshot Copy() => JsonSerializer.Deserialize<Snapshot>(JsonSerializer.Serialize(this, StateJson.Options), StateJson.Options)!;
+
+    /// <summary>
+    /// Copy one lever's part (and whether it is missing) from another snapshot: an older baseline that is still owed
+    /// because its restore failed or the switch that took it was interrupted, or a capture retried on its own.
     /// </summary>
     public void CopyPartFrom(Snapshot older, LeverKind kind)
     {
@@ -70,14 +107,18 @@ public sealed class Snapshot
                 break;
             case LeverKind.Apps:
                 Processes = [.. older.Processes];
+                CoveredApps = older.CoveredApps is { } apps ? [.. apps] : null;
                 break;
             case LeverKind.Services:
                 Services = new Dictionary<string, bool>(older.Services, StringComparer.OrdinalIgnoreCase);
+                CoveredServices = older.CoveredServices is { } services ? [.. services] : null;
                 break;
             case LeverKind.Efficiency:
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), kind, null);
         }
+
+        SetMissing(kind, older.Missing.Contains(kind));
     }
 }

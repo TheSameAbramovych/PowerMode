@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using PowerMode.Core.Input;
+using PowerMode.Core.Model;
 
 namespace PowerMode.Core.Config;
 
@@ -109,6 +110,12 @@ public static class ConfigLoader
         if (config.Modes.Station.Scheme.Id == config.Modes.Reserve.Scheme.Id)
         {
             errors.Add("modes.station.Scheme.Id and modes.reserve.Scheme.Id must differ.");
+        }
+
+        var fallback = config.FallbackScheme;
+        if (fallback == Guid.Empty || PowerSchemes.IsOwn(fallback) || fallback == config.Modes.Station.Scheme.Id || fallback == config.Modes.Reserve.Scheme.Id)
+        {
+            errors.Add("fallbackScheme must be a non-empty GUID other than the two PowerMode schemes.");
         }
 
         RequireRange(errors, "docker.engineWaitSeconds", config.Docker.EngineWaitSeconds, 1, 900);

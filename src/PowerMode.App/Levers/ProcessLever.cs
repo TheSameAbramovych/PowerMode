@@ -33,8 +33,12 @@ internal sealed class ProcessLever : ILever
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(config);
+        // Only names this baseline has not looked at yet (all of them for a fresh one): a name added to a close
+        // list later is captured on its own, and what was captured before is never overwritten.
+        var covered = snapshot.CoveredAppNames();
+        var names = config.AllCloseApps().Where(n => !covered.Contains(n, StringComparer.OrdinalIgnoreCase)).ToList();
         var captured = new List<CapturedProcess>();
-        foreach (var name in config.AllCloseApps())
+        foreach (var name in names)
         {
             var processes = ProcessInfo.ByName(name);
             try
@@ -50,7 +54,8 @@ internal sealed class ProcessLever : ILever
             }
         }
 
-        snapshot.Processes = captured;
+        snapshot.Processes = [.. snapshot.Processes, .. captured];
+        snapshot.CoveredApps = [.. covered, .. names];
         return Task.CompletedTask;
     }
 

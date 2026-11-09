@@ -27,7 +27,8 @@ internal sealed class PowercfgLever : ILever
     public async Task CaptureAsync(Snapshot snapshot, AppConfig config, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        snapshot.ActiveScheme = await ActiveSchemeAsync(cancellationToken).ConfigureAwait(false);
+        snapshot.ActiveScheme = await ActiveSchemeAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new LeverException("powercfg /getactivescheme returned no scheme");
     }
 
     public async Task<LeverPlan> PlanAsync(ApplyContext context, CancellationToken cancellationToken)
@@ -47,12 +48,12 @@ internal sealed class PowercfgLever : ILever
         {
             if (!exists)
             {
-                return LeverPlan.Fail($"Your scheme {target.Scheme} no longer exists");
+                return LeverPlan.Fail($"{SchemeLabel(target)} {target.Scheme} no longer exists", permanent: true);
             }
 
             if (active != target.Scheme)
             {
-                actions.Add(Action($"Activate your scheme {target.Scheme}", "/setactive", Id(target.Scheme)));
+                actions.Add(Action($"Activate {SchemeLabel(target)} {target.Scheme}", "/setactive", Id(target.Scheme)));
             }
 
             return LeverPlan.Of(actions);
@@ -118,4 +119,7 @@ internal sealed class PowercfgLever : ILever
     }
 
     private static string Id(Guid guid) => guid.ToString("D", CultureInfo.InvariantCulture);
+
+    /// <summary>The fallback is used when the scheme that was active before is unknown; say so in the result.</summary>
+    private static string SchemeLabel(SchemeTarget target) => target.IsFallback ? "the fallback scheme (the original one is unknown)" : "your scheme";
 }

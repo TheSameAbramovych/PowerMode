@@ -1,9 +1,13 @@
 using PowerMode.Core.Config;
+using PowerMode.Core.Levers;
 
 namespace PowerMode.Core.Model;
 
-/// <summary>Activate <see cref="Scheme"/>; when <see cref="Configure"/> is set, (re)create and configure it first.</summary>
-public sealed record SchemeTarget(Guid Scheme, SchemeConfig? Configure);
+/// <summary>
+/// Activate <see cref="Scheme"/>; when <see cref="Configure"/> is set, (re)create and configure it first. <see cref="IsFallback"/>:
+/// Grid does not know the scheme that was active before (its read failed), so it activates the configured fallback.
+/// </summary>
+public sealed record SchemeTarget(Guid Scheme, SchemeConfig? Configure, bool IsFallback = false);
 
 /// <summary>Either one brightness for every monitor, or restore each monitor from the snapshot.</summary>
 public sealed record MonitorTarget(int? BrightnessPercent, IReadOnlyList<MonitorLevel> Restore);
@@ -65,4 +69,19 @@ public sealed record TargetState
     public EfficiencyTarget Efficiency { get; init; } = EfficiencyTarget.ClearAll;
 
     public ServicesTarget Services { get; init; } = ServicesTarget.Empty;
+
+    /// <summary>This target asks the lever to change something (as opposed to "leave it alone").</summary>
+    public bool Sets(LeverKind kind) => kind switch
+    {
+        LeverKind.PowerScheme => Scheme is not null,
+        LeverKind.DisplayMode => Refresh is not null,
+        LeverKind.Brightness => Monitor is not null,
+        LeverKind.Gpu => Gpu is not null,
+        LeverKind.WallpaperEngine => Wallpaper != WallpaperAction.Leave,
+        LeverKind.Docker => Docker is not null,
+        LeverKind.Apps => Apps.Close.Count > 0 || Apps.Relaunch.Count > 0,
+        LeverKind.Efficiency => Efficiency.ProcessNames.Count > 0,
+        LeverKind.Services => Services.Stop.Count > 0 || Services.Start.Count > 0,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
+    };
 }

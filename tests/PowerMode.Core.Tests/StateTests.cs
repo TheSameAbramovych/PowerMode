@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PowerMode.Core.Levers;
 using PowerMode.Core.Model;
 using PowerMode.Core.Presentation;
@@ -56,7 +57,7 @@ public sealed class StateTests
     }
 
     [Fact]
-    public void Missing_or_corrupt_state_starts_from_grid()
+    public void Missing_or_corrupt_state_without_a_backup_starts_from_grid_and_keeps_the_bad_file()
     {
         using var dir = new TempDir();
         var log = new ListLog();
@@ -69,10 +70,162 @@ public sealed class StateTests
 
         Assert.Equal(PowerModeKind.Grid, loaded.Mode);
         Assert.Null(loaded.Snapshot);
-        Assert.Contains(log.Lines, l => l.Contains("starting from Grid", StringComparison.Ordinal));
+        Assert.Contains(log.Lines, l => l.Contains("the baseline is lost", StringComparison.Ordinal));
+        Assert.False(File.Exists(store.Path));
+        var kept = Assert.Single(Directory.GetFiles(dir.Path, "state.json.corrupt-*"));
+        Assert.Equal("{ corrupt", File.ReadAllText(kept));
+    }
 
-        File.WriteAllText(store.Path, "null");
+    [Theory]
+    [InlineData("")]
+    [InlineData("null")]
+    [InlineData("{\"mode\":\"station\",\"snapshot\":{\"monit")]
+    [InlineData("\0\0\0\0\0\0\0\0")]
+    public void An_empty_truncated_or_zeroed_state_recovers_from_the_backup(string bad)
+    {
+        using var dir = new TempDir();
+        var log = new ListLog();
+        var store = new StateStore(dir.File("state.json"), log);
+        store.Save(new PersistedState { Mode = PowerModeKind.Station, Snapshot = RenderFixtures.Baseline() });
+        store.Save(new PersistedState { Mode = PowerModeKind.Reserve, Snapshot = RenderFixtures.Baseline() });
+        Assert.Equal(PowerModeKind.Station, StateStore.Deserialize(File.ReadAllText(store.BackupPath))!.Mode);
+
+        File.WriteAllText(store.Path, bad);
+        var loaded = store.Load();
+
+        Assert.Equal(PowerModeKind.Station, loaded.Mode);
+        Assert.Equal(80, loaded.Snapshot!.Monitors.Single().Brightness);
+        Assert.Single(Directory.GetFiles(dir.Path, "state.json.corrupt-*"));
+        Assert.Contains(log.Lines, l => l.Contains("Recovered the state", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_corrupt_backup_too_starts_from_grid()
+    {
+        using var dir = new TempDir();
+        var log = new ListLog();
+        var store = new StateStore(dir.File("state.json"), log);
+        File.WriteAllText(store.Path, "{");
+        File.WriteAllText(store.BackupPath, "{");
+
         Assert.Equal(PowerModeKind.Grid, store.Load().Mode);
+        Assert.True(File.Exists(store.BackupPath));
+        Assert.Contains(log.Lines, l => l.Contains("the baseline is lost", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_locked_state_file_is_not_set_aside()
+    {
+        using var dir = new TempDir();
+        var log = new ListLog();
+        var store = new StateStore(dir.File("state.json"), log);
+        store.Save(new PersistedState { Mode = PowerModeKind.Station });
+
+        using (new FileStream(store.Path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Equal(PowerModeKind.Grid, store.Load().Mode);
+        }
+
+        Assert.True(File.Exists(store.Path));
+        Assert.Empty(Directory.GetFiles(dir.Path, "state.json.corrupt-*"));
+        Assert.Contains(log.Lines, l => l.Contains("Cannot read", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Unknown_enum_values_from_another_version_keep_the_snapshot()
+    {
+        var json = """
+            {
+              "mode": "station",
+              "snapshot": { "monitors": [ { "id": "m#0", "brightness": 80 } ], "missing": [ "gpu", "turbo", 3 ], "restored": [ "docker" ] },
+              "lastResults": {
+                "ecoQos": { "status": "ok", "detail": "x" },
+                "gpu": { "status": "partial", "detail": "y" },
+                "brightness": { "status": "ok", "detail": "z" },
+                "7": { "status": "ok", "detail": "numeric key" }
+              },
+              "options": { "blackout": { "keepDocker": true }, "station": { "keepDocker": true }, "reserve": null }
+            }
+            """;
+
+        var state = StateStore.Deserialize(json)!;
+
+        Assert.Equal(PowerModeKind.Station, state.Mode);
+        Assert.Equal(80, state.Snapshot!.Monitors.Single().Brightness);
+        Assert.Equal([LeverKind.Gpu], state.Snapshot.Missing);
+        Assert.Equal([LeverKind.Docker], state.Snapshot.Restored);
+        Assert.Equal([LeverKind.Brightness, LeverKind.Gpu], state.LastResults.Keys.Order());
+        Assert.Equal(LeverStatus.Failed, state.LastResults[LeverKind.Gpu].Status);
+        Assert.Equal(LeverStatus.Ok, state.LastResults[LeverKind.Brightness].Status);
+        Assert.True(state.OptionsFor(PowerModeKind.Station).KeepDocker);
+        Assert.Single(state.Options);
+    }
+
+    [Theory]
+    [InlineData("{\"lastResults\": []}")]
+    [InlineData("{\"snapshot\": {\"missing\": {}}}")]
+    public void Wrong_collection_shapes_are_still_corrupt(string json)
+    {
+        Assert.Throws<JsonException>(() => StateStore.Deserialize(json));
+    }
+
+    [Fact]
+    public void Save_keeps_the_previous_state_as_backup()
+    {
+        using var dir = new TempDir();
+        var store = new StateStore(dir.File("state.json"), new ListLog());
+
+        store.Save(new PersistedState { Mode = PowerModeKind.Station });
+        Assert.False(File.Exists(store.BackupPath));
+        store.Save(new PersistedState { Mode = PowerModeKind.Reserve });
+
+        Assert.Equal(PowerModeKind.Reserve, store.Load().Mode);
+        Assert.Equal(PowerModeKind.Station, StateStore.Deserialize(File.ReadAllText(store.BackupPath))!.Mode);
+    }
+
+    [Fact]
+    public void Baseline_bookkeeping_round_trips_and_follows_copied_parts()
+    {
+        var older = RenderFixtures.Baseline();
+        older.Missing = [LeverKind.Gpu];
+        older.Restored = [LeverKind.Docker];
+        older.CoveredApps = ["steam", "EPSDNMON"];
+        older.CoveredServices = ["WSearch"];
+        older.Processes = [new CapturedProcess("ChatGPT", @"C:\Program Files\WindowsApps\x\ChatGPT.exe", string.Empty, "OpenAI.Codex_2p2nqsd0c76g0!App")];
+
+        var copy = older.Copy();
+        Assert.Equal(StateStore.Serialize(new PersistedState { Snapshot = older }), StateStore.Serialize(new PersistedState { Snapshot = copy }));
+        Assert.Equal("OpenAI.Codex_2p2nqsd0c76g0!App", copy.Processes.Single().AppUserModelId);
+
+        var fresh = new Snapshot { Missing = [LeverKind.Apps] };
+        fresh.CopyPartFrom(older, LeverKind.Gpu);
+        fresh.CopyPartFrom(older, LeverKind.Apps);
+        fresh.CopyPartFrom(older, LeverKind.Services);
+        Assert.Equal([LeverKind.Gpu], fresh.Missing);
+        Assert.Equal(["steam", "EPSDNMON"], fresh.CoveredAppNames());
+        Assert.Equal(["WSearch"], fresh.CoveredServiceNames());
+        Assert.False(fresh.Owes(LeverKind.Gpu));
+        Assert.True(fresh.Owes(LeverKind.Apps));
+    }
+
+    [Fact]
+    public void A_legacy_snapshot_without_covered_lists_covers_what_it_captured()
+    {
+        var json = """{ "processes": [ { "name": "steam", "path": "s.exe", "arguments": "" } ], "services": { "WSearch": true } }""";
+
+        var snapshot = JsonSerializer.Deserialize<Snapshot>(json, StateJson.Options)!;
+
+        Assert.Null(snapshot.CoveredApps);
+        Assert.Null(snapshot.Processes.Single().AppUserModelId);
+        Assert.Equal(["steam"], snapshot.CoveredAppNames());
+        Assert.Equal(["WSearch"], snapshot.CoveredServiceNames());
+        Assert.Empty(snapshot.Missing);
+
+        var fresh = new Snapshot();
+        fresh.CopyPartFrom(snapshot, LeverKind.Apps);
+        fresh.CopyPartFrom(snapshot, LeverKind.Services);
+        Assert.Null(fresh.CoveredApps);
+        Assert.Null(fresh.CoveredServices);
     }
 
     [Fact]

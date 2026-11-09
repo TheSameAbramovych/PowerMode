@@ -52,6 +52,20 @@ internal sealed class AppServices : IDisposable
 
     public static AppServices Create() => new();
 
+    /// <summary>Before applying anything: if the state was lost while a PowerMode scheme is active, take that mode back.</summary>
+    public async Task RecoverLostModeAsync()
+    {
+        try
+        {
+            var active = await LeverSet.Powercfg.ActiveSchemeAsync(CancellationToken.None).ConfigureAwait(false);
+            await Switcher.RecoverLostModeAsync(active).ConfigureAwait(false);
+        }
+        catch (LeverException ex)
+        {
+            Log.Error("state", "Cannot read the active power scheme to check for a lost state", ex);
+        }
+    }
+
     /// <summary>The flyout/status state for the current mode (or the one being applied), results and live values.</summary>
     public FlyoutState BuildState(LiveValues live, bool startWithWindows, SwitchInProgress? progress = null)
     {

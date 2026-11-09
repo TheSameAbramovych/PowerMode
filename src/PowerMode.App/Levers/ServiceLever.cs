@@ -18,8 +18,11 @@ internal sealed class ServiceLever : ILever
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(config);
-        var services = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in config.AllServices())
+        // Only names this baseline has not looked at yet; see ProcessLever.CaptureAsync.
+        var covered = snapshot.CoveredServiceNames();
+        var names = config.AllServices().Where(n => !covered.Contains(n, StringComparer.OrdinalIgnoreCase)).ToList();
+        var services = new Dictionary<string, bool>(snapshot.Services, StringComparer.OrdinalIgnoreCase);
+        foreach (var name in names)
         {
             if (Status(name) is { } status)
             {
@@ -28,6 +31,7 @@ internal sealed class ServiceLever : ILever
         }
 
         snapshot.Services = services;
+        snapshot.CoveredServices = [.. covered, .. names];
         return Task.CompletedTask;
     }
 

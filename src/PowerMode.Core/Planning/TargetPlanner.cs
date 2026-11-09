@@ -1,4 +1,5 @@
 using PowerMode.Core.Config;
+using PowerMode.Core.Levers;
 using PowerMode.Core.Model;
 using PowerMode.Core.State;
 
@@ -28,19 +29,36 @@ public static class TargetPlanner
             return new TargetState { Mode = PowerModeKind.Grid };
         }
 
+        // Parts already restored are no longer owed; missing parts were never reduced, so they are left alone.
         return new TargetState
         {
             Mode = PowerModeKind.Grid,
-            Scheme = snapshot.ActiveScheme is { } scheme && !PowerSchemes.IsOwn(scheme) ? new SchemeTarget(scheme, null) : null,
-            Monitor = snapshot.Monitors.Count > 0 ? new MonitorTarget(null, snapshot.Monitors) : null,
-            Refresh = snapshot.Displays.Count > 0 ? new RefreshTarget(null, snapshot.Displays) : null,
-            Gpu = snapshot.Gpu is { } gpu ? new GpuTarget(null, gpu.LimitMilliwatts) : null,
-            Wallpaper = snapshot.WallpaperEngineRunning ? WallpaperAction.Play : WallpaperAction.Leave,
-            Docker = RestoreDocker(config, snapshot),
-            Apps = new AppsTarget([], snapshot.Processes),
+            Scheme = RestoreScheme(config, snapshot),
+            Monitor = snapshot.Owes(LeverKind.Brightness) && snapshot.Monitors.Count > 0 ? new MonitorTarget(null, snapshot.Monitors) : null,
+            Refresh = snapshot.Owes(LeverKind.DisplayMode) && snapshot.Displays.Count > 0 ? new RefreshTarget(null, snapshot.Displays) : null,
+            Gpu = snapshot.Owes(LeverKind.Gpu) && snapshot.Gpu is { } gpu ? new GpuTarget(null, gpu.LimitMilliwatts) : null,
+            Wallpaper = snapshot.Owes(LeverKind.WallpaperEngine) && snapshot.WallpaperEngineRunning ? WallpaperAction.Play : WallpaperAction.Leave,
+            Docker = snapshot.Owes(LeverKind.Docker) ? RestoreDocker(config, snapshot) : null,
+            Apps = snapshot.Owes(LeverKind.Apps) ? new AppsTarget([], snapshot.Processes) : AppsTarget.Empty,
             Efficiency = EfficiencyTarget.ClearAll,
-            Services = new ServicesTarget([], RunningServices(snapshot, [])),
+            Services = snapshot.Owes(LeverKind.Services) ? new ServicesTarget([], RunningServices(snapshot, [])) : ServicesTarget.Empty,
         };
+    }
+
+    /// <summary>
+    /// The scheme from the baseline; when it is unknown (missing, or one of PowerMode's own), the configured fallback,
+    /// because a saving mode activated its own scheme regardless and Grid must always leave it.
+    /// </summary>
+    private static SchemeTarget? RestoreScheme(AppConfig config, Snapshot snapshot)
+    {
+        if (snapshot.Restored.Contains(LeverKind.PowerScheme))
+        {
+            return null;
+        }
+
+        return snapshot.Owes(LeverKind.PowerScheme) && snapshot.ActiveScheme is { } scheme && !PowerSchemes.IsOwn(scheme)
+            ? new SchemeTarget(scheme, null)
+            : new SchemeTarget(config.FallbackScheme, null, IsFallback: true);
     }
 
     private static TargetState PlanSaving(PowerModeKind mode, ModeConfig m, AppConfig config, Snapshot? snapshot, ModeOptions options)

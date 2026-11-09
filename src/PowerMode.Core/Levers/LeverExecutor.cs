@@ -27,7 +27,8 @@ public sealed class LeverExecutor
         _actionTimeout = actionTimeout ?? DefaultActionTimeout;
     }
 
-    public async Task CaptureAsync(ILever lever, Snapshot snapshot, AppConfig config, CancellationToken cancellationToken)
+    /// <summary>Capture one lever's part of the baseline. False when the read failed or was inconclusive (the lever threw).</summary>
+    public async Task<bool> CaptureAsync(ILever lever, Snapshot snapshot, AppConfig config, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(lever);
         var watch = Stopwatch.StartNew();
@@ -35,10 +36,12 @@ public sealed class LeverExecutor
         {
             await lever.CaptureAsync(snapshot, config, cancellationToken).ConfigureAwait(false);
             _log.Write(Category, $"{lever.Kind}: captured baseline ({Ms(watch)})");
+            return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _log.Error(Category, $"{lever.Kind}: capture failed ({Ms(watch)})", ex);
+            return false;
         }
     }
 
@@ -82,7 +85,7 @@ public sealed class LeverExecutor
         var plan = await PlanAsync(lever, context, cancellationToken).ConfigureAwait(false);
         if (plan.Unavailable is { } unavailable)
         {
-            return LeverResult.Failed(unavailable);
+            return LeverResult.Failed(unavailable) with { Permanent = plan.Permanent };
         }
 
         if (plan.NotOwned)
