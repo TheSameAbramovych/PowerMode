@@ -35,6 +35,15 @@ public sealed class PersistedState
 
     public Dictionary<LeverKind, LeverResult> LastResults { get; set; } = [];
 
+    /// <summary>The flyout stays open when it loses focus (default); off = it hides when you click elsewhere.</summary>
+    public bool FlyoutPinned { get; set; } = true;
+
+    /// <summary>
+    /// The exe path whose tray icon PowerMode has already promoted onto the taskbar (or told the user to drag there).
+    /// Done once per path, so an icon the user later hides stays hidden.
+    /// </summary>
+    public string? TrayPromotedFor { get; set; }
+
     /// <summary>The options of a mode (defaults when never set). Read-only: change them with <see cref="WithOptions"/>.</summary>
     public ModeOptions OptionsFor(PowerModeKind mode) => Options.TryGetValue(mode, out var options) ? options : new ModeOptions();
 

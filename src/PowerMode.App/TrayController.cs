@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -226,10 +225,7 @@ internal sealed class TrayController : IDisposable
         var state = _services.BuildState(_live, _autostart, _progress);
         _model.Update(state);
         var mode = _progress?.Mode ?? _services.Switcher.State.Mode;
-        var tooltip = _progress is not null
-            ? $"PowerMode{FlyoutStateBuilder.Dot}Applying {ModeNames.Display(mode)}…"
-            : $"PowerMode{FlyoutStateBuilder.Dot}{ModeNames.Display(mode)}"
-              + (_live.GpuWatts is { } watts ? string.Create(CultureInfo.InvariantCulture, $"{FlyoutStateBuilder.Dot}GPU {watts:0} W") : string.Empty);
+        var tooltip = FlyoutStateBuilder.Tooltip(mode, _progress is not null, _live.GpuWatts);
         _tray.Update(mode, _queue.IsSwitching || _progress is not null, _progress is null ? null : _spinnerFrame, _autostart, tooltip);
     }
 

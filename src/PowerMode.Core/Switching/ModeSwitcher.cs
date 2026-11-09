@@ -155,6 +155,28 @@ public sealed class ModeSwitcher : IDisposable
         }
     }
 
+    /// <summary>Keep the flyout open when it loses focus, or not. Saved at once (under the gate, like every state write).</summary>
+    public Task SetFlyoutPinnedAsync(bool pinned, CancellationToken cancellationToken = default) =>
+        SaveAsync(state => state.FlyoutPinned = pinned, cancellationToken);
+
+    /// <summary>Remember that the tray icon of this exe path was promoted (or the user was told how), so it is done only once.</summary>
+    public Task SetTrayPromotedForAsync(string exePath, CancellationToken cancellationToken = default) =>
+        SaveAsync(state => state.TrayPromotedFor = exePath, cancellationToken);
+
+    private async Task SaveAsync(Action<PersistedState> change, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            change(State);
+            _store.Save(State);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>
     /// After a change on the Apps settings page (the config already holds the new lists): re-apply the levers that
     /// <paramref name="leversFor"/> returns for the current mode (see <see cref="Settings.AppSettings.ImmediateLevers"/>).

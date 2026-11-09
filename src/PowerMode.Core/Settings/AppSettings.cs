@@ -195,3 +195,25 @@ public static class AppSettings
 
     private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 }
+
+/// <summary>
+/// The status line of the Apps settings page: <see cref="Saved"/> (muted, next to the title) after every saved
+/// change, <see cref="Error"/> (red, under the add field) when a change was not saved or a typed name is invalid.
+/// </summary>
+public sealed record SettingsFeedback(string? Saved, string? Error)
+{
+    public static SettingsFeedback None { get; } = new(null, null);
+
+    /// <summary>A change was saved: "Saved 10:31" (local time) replaces any earlier one, and any error goes.</summary>
+    public static SettingsFeedback SavedAt(DateTimeOffset localTime) =>
+        new($"Saved {localTime.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)}", null);
+
+    /// <summary>A change was not saved: no "Saved" for it, only the error.</summary>
+    public static SettingsFeedback NotSaved(string error) => new(null, error);
+
+    /// <summary>A typed name is invalid: the earlier "Saved" still holds.</summary>
+    public SettingsFeedback Invalid(string error) => this with { Error = error };
+
+    /// <summary>The input is fine again.</summary>
+    public SettingsFeedback Valid() => this with { Error = null };
+}

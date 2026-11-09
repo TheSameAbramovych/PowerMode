@@ -107,6 +107,13 @@ public static class FlyoutStateBuilder
         return (title, string.Join(Dot, parts));
     }
 
+    /// <summary>Tray tooltip: <c>PowerMode · Station · GPU 9 W</c>; while a switch runs <c>PowerMode · Applying Station… · GPU 9 W</c>.</summary>
+    public static string Tooltip(PowerModeKind mode, bool applying, double? gpuWatts)
+    {
+        var text = $"PowerMode{Dot}{(applying ? $"Applying {ModeNames.Display(mode)}{Ellipsis}" : ModeNames.Display(mode))}";
+        return gpuWatts is { } watts ? text + string.Create(CultureInfo.InvariantCulture, $"{Dot}GPU {watts:0} W") : text;
+    }
+
     public static string Footer(HotkeyConfig hotkeys)
     {
         ArgumentNullException.ThrowIfNull(hotkeys);
